@@ -1,3 +1,8 @@
+// awareguard-backend/utils/OpenAiHelpers.js
+import axios from 'axios';
+import 'dotenv/config';
+
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 export async function chatHelper(message, model = 'openai/gpt-4o') {
   const url = 'https://openrouter.ai/api/v1/chat/completions';
   try {
