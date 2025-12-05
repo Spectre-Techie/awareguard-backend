@@ -14,6 +14,17 @@ const port = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
+// Add this route to handle the root path
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'AwareGuard backend is running',
+    endpoints: [
+      '/api/ask',
+      '/api/report'
+    ]
+  });
+});
+
 // ✅ Routes
 app.use('/api/report', reportRoute);      // Good: /api/report handled separately
 app.use('/api/ask', askRoute);            // Good: directly responds to POST /api/ask
@@ -22,3 +33,4 @@ app.use('/api/ask', askRoute);            // Good: directly responds to POST /ap
 app.listen(port, () => {
   console.log(`✅ AwareGuard backend running on http://localhost:${port}`);
 });
+
