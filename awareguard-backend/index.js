@@ -1,36 +1,36 @@
-// awareguard-backend/index.js
 import express from "express";
 import cors from "cors";
 import { config } from "dotenv";
-import askRoute from "./routes/sendMessages.js";  // ✅ Handles /api/ask
-import reportRoute from './routes/report.js';     // ✅ Handles /api/report (if that’s what it does)
+import askRoute from "./routes/sendMessages.js";
+import reportRoute from "./routes/report.js";
 
-config(); // ✅ Load env vars from .env file
+// 🔹 NEW IMPORTS
+import { connectDB } from "./config/db.js";
+import storiesRoute from "./routes/stories.js";
+
+config();
 
 const app = express();
 const port = process.env.PORT || 8000;
 
-// ✅ Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Add this route to handle the root path
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'AwareGuard backend is running',
-    endpoints: [
-      '/api/ask',
-      '/api/report'
-    ]
-  });
+// 🔹 CONNECT TO MONGO
+connectDB();
+
+// 🔹 EXISTING ROUTES (unchanged)
+app.use("/api/report", reportRoute);
+app.use("/api/ask", askRoute);
+
+// 🔹 NEW STORIES ROUTE
+app.use("/api/stories", storiesRoute);
+
+// 🔹 SIMPLE HEALTH CHECK
+app.get("/", (req, res) => {
+  res.json({ message: "AwareGuard API running" });
 });
 
-// ✅ Routes
-app.use('/api/report', reportRoute);      // Good: /api/report handled separately
-app.use('/api/ask', askRoute);            // Good: directly responds to POST /api/ask
-
-// ✅ Server start
 app.listen(port, () => {
   console.log(`✅ AwareGuard backend running on http://localhost:${port}`);
 });
-
