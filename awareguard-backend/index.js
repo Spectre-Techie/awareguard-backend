@@ -3,6 +3,9 @@ import cors from "cors";
 import { config } from "dotenv";
 import askRoute from "./routes/sendMessages.js";
 import reportRoute from "./routes/report.js";
+import authRoute from "./routes/auth.js";
+import learningRoute from "./routes/learning.js";
+import leadsRoute from "./routes/leads.js";
 
 // 🔹 NEW IMPORTS
 import { connectDB } from "./config/db.js";
@@ -23,6 +26,12 @@ connectDB();
 app.use("/api/report", reportRoute);
 app.use("/api/ask", askRoute);
 
+//New Routes
+app.use("/api/auth", authRoute);
+app.use("/api/learning", learningRoute);
+app.use("/api/leads", leadsRoute);
+
+
 // 🔹 NEW STORIES ROUTE
 app.use("/api/stories", storiesRoute);
 
@@ -34,3 +43,4 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`✅ AwareGuard backend running on http://localhost:${port}`);
 });
+
