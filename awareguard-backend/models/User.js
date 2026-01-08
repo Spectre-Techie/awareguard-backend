@@ -131,4 +131,4 @@ userSchema.methods.addPaymentHistory = function (reference, amount, plan, status
 // Compound index for subscription queries
 userSchema.index({ isPremium: 1, subscriptionExpiresAt: 1 });
 
-export const User = mongoose.model("User", userSchema);
+export default User = mongoose.model("User", userSchema);
