@@ -6,7 +6,7 @@ import reportRoute from "./routes/report.js";
 import authRoute from "./routes/auth.js";
 import learningRoute from "./routes/learning.js";
 import leadsRoute from "./routes/leads.js";
-import paymentRoute = from  "./routes/payments.js";
+import paymentRoute from  "./routes/payments.js";
 
 // 🔹 NEW IMPORTS
 import { connectDB } from "./config/db.js";
@@ -48,5 +48,6 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`✅ AwareGuard backend running on http://localhost:${port}`);
 });
+
 
 
