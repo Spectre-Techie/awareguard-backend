@@ -440,4 +440,4 @@ router.post('/cancel-subscription', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
