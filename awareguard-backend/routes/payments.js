@@ -9,11 +9,11 @@
  * - Subscription management
  */
 
-const express = require('express');
+import express from "express";
 const router = express.Router();
-const crypto = require('crypto');
-const authenticateToken = require('../middleware/auth');
-const User = require('../models/User');
+import crypto from "crypto";
+import authenticateToken from "../middleware/auth.js";
+import User from "../models/User.js";
 
 /**
  * POST /api/payments/initialize
