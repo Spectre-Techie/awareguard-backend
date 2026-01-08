@@ -6,6 +6,7 @@ import reportRoute from "./routes/report.js";
 import authRoute from "./routes/auth.js";
 import learningRoute from "./routes/learning.js";
 import leadsRoute from "./routes/leads.js";
+import paymentRoute = from  "./routes/payments.js";
 
 // 🔹 NEW IMPORTS
 import { connectDB } from "./config/db.js";
@@ -22,6 +23,8 @@ app.use(express.json());
 // 🔹 CONNECT TO MONGO
 connectDB();
 
+app.post('/api/payments/webhook', express.json(), paymentRoute);
+
 // 🔹 EXISTING ROUTES (unchanged)
 app.use("/api/report", reportRoute);
 app.use("/api/ask", askRoute);
@@ -30,7 +33,8 @@ app.use("/api/ask", askRoute);
 app.use("/api/auth", authRoute);
 app.use("/api/learning", learningRoute);
 app.use("/api/leads", leadsRoute);
-
+// Payment routes
+app.use("/api/payments", paymentRoute);
 
 // 🔹 NEW STORIES ROUTE
 app.use("/api/stories", storiesRoute);
@@ -40,7 +44,9 @@ app.get("/", (req, res) => {
   res.json({ message: "AwareGuard API running" });
 });
 
+
 app.listen(port, () => {
   console.log(`✅ AwareGuard backend running on http://localhost:${port}`);
 });
+
 
