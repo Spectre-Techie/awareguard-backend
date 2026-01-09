@@ -12,7 +12,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { User } from '../models/User.js';
-import { auth } from '../middleware/auth.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -31,7 +31,7 @@ const router = express.Router();
  *   - message (string): Response message
  *   - user (object): Updated user data
  */
-router.get('/verify-payment/:reference', auth, async (req, res) => {
+router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
   try {
     const { reference } = req.params;
     const userId = req.user.id; // From auth middleware
@@ -218,7 +218,7 @@ router.post('/paystack-webhook', express.json(), async (req, res) => {
  *   - subscriptionExpiresAt (date): When subscription expires
  *   - daysRemaining (number): Days until expiration
  */
-router.get('/subscription-status', auth, async (req, res) => {
+router.get('/subscription-status', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId).select(
@@ -270,7 +270,7 @@ router.get('/subscription-status', auth, async (req, res) => {
  *   - success (boolean): Whether cancellation was successful
  *   - message (string): Confirmation message
  */
-router.post('/cancel-subscription', auth, async (req, res) => {
+router.post('/cancel-subscription', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
