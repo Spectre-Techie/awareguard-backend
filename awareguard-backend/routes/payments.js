@@ -1,136 +1,43 @@
 /**
- * Payment Routes - Paystack Integration
- * Location: awareguard-backend/routes/payments.js
+ * payments.js - Payment API Routes
+ * Location: awareguard-backend/routes/api/payments.js
  * 
- * Handles all payment-related operations:
- * - Payment initialization
- * - Payment verification
- * - Webhook events
- * - Subscription management
+ * Endpoints:
+ * GET  /api/verify-payment/:reference - Verify Paystack payment and activate premium
+ * POST /api/paystack-webhook - Receive webhook events from Paystack
+ * GET  /api/subscription-status - Get current user subscription status
+ * POST /api/cancel-subscription - Cancel user subscription
  */
 
-import express from "express";
+import express from 'express';
+import crypto from 'crypto';
+import { User } from '../../models/User.js';
+import { auth } from '../../middleware/auth.js';
+
 const router = express.Router();
-import crypto from "crypto";
-import authenticateToken from "../middleware/auth.js";
-import User from "../models/User.js";
 
 /**
- * POST /api/payments/initialize
- * Initialize a Paystack payment
- * 
- * Body:
- *   - amount (number): Amount in NGN
- *   - plan (string): 'monthly' or 'annual'
- * 
- * Returns:
- *   - authorization_url (string): URL to redirect user
- *   - access_code (string): Paystack access code
- *   - reference (string): Transaction reference
- */
-router.post('/initialize', authenticateToken, async (req, res) => {
-  try {
-    const { amount, plan } = req.body;
-    const user = req.user;
-
-    // Validate input
-    if (!amount || !plan) {
-      return res.status(400).json({
-        success: false,
-        message: 'Amount and plan are required'
-      });
-    }
-
-    if (!['monthly', 'annual'].includes(plan)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Plan must be monthly or annual'
-      });
-    }
-
-    // Validate amount matches expected pricing
-    const expectedAmounts = {
-      monthly: 9999,
-      annual: 99999
-    };
-
-    if (amount !== expectedAmounts[plan]) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid amount for selected plan'
-      });
-    }
-
-    // Generate unique reference
-    const reference = `premium_${plan}_${user._id}_${Date.now()}`;
-
-    // Initialize Paystack transaction
-    const response = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        email: user.email,
-        amount: amount * 100, // Convert to kobo
-        currency: 'NGN',
-        reference: reference,
-        metadata: {
-          userId: user._id.toString(),
-          plan: plan,
-          email: user.email
-        }
-      })
-    });
-
-    const data = await response.json();
-
-    if (!data.status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Failed to initialize payment',
-        error: data.message
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        authorization_url: data.data.authorization_url,
-        access_code: data.data.access_code,
-        reference: data.data.reference
-      }
-    });
-
-  } catch (error) {
-    console.error('Payment initialization error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error initializing payment',
-      error: error.message
-    });
-  }
-});
-
-/**
- * GET /api/payments/verify/:reference
- * Verify Paystack payment and activate premium
+ * GET /api/verify-payment/:reference
+ * Verify Paystack payment and activate premium subscription
  * 
  * Params:
  *   - reference (string): Paystack transaction reference
  * 
+ * Headers:
+ *   - Authorization: Bearer {token}
+ * 
  * Returns:
  *   - success (boolean): Whether verification was successful
+ *   - message (string): Response message
  *   - user (object): Updated user data
  */
-router.get('/verify/:reference', authenticateToken, async (req, res) => {
+router.get('/verify-payment/:reference', auth, async (req, res) => {
   try {
     const { reference } = req.params;
-    const userId = req.user._id;
+    const userId = req.user.id; // From auth middleware
 
     // Verify with Paystack API
-    const response = await fetch(
+    const paystackResponse = await fetch(
       `https://api.paystack.co/transaction/verify/${reference}`,
       {
         method: 'GET',
@@ -138,55 +45,54 @@ router.get('/verify/:reference', authenticateToken, async (req, res) => {
           Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
         }
       }
-    );
+    ).then(res => res.json());
 
-    const paystackData = await response.json();
-
-    if (!paystackData.status) {
+    if (!paystackResponse.status) {
       return res.status(400).json({
         success: false,
         message: 'Payment verification failed'
       });
     }
 
-    const transaction = paystackData.data;
+    const transaction = paystackResponse.data;
 
     // Verify transaction status
     if (transaction.status !== 'success') {
       return res.status(400).json({
         success: false,
-        message: 'Payment was not successful',
-        status: transaction.status
+        message: 'Payment was not successful'
       });
     }
 
-    // Verify user matches
-    if (transaction.metadata?.userId !== userId.toString()) {
-      return res.status(400).json({
-        success: false,
-        message: 'User mismatch - payment does not match your account'
-      });
-    }
-
-    // Verify amount matches expected
-    const plan = transaction.metadata?.plan || 'monthly';
+    // Verify amount (check if it matches expected)
     const expectedAmounts = {
       monthly: 999900, // ₦9,999 in kobo
       annual: 9999900  // ₦99,999 in kobo
     };
 
-    if (transaction.amount !== expectedAmounts[plan]) {
+    const plan = transaction.metadata?.plan || 'monthly';
+    const expectedAmount = expectedAmounts[plan];
+
+    if (transaction.amount !== expectedAmount) {
       return res.status(400).json({
         success: false,
         message: 'Payment amount mismatch'
       });
     }
 
-    // Calculate subscription expiry
+    // Verify user matches
+    if (transaction.metadata?.userId !== userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User mismatch - payment does not match your account'
+      });
+    }
+
+    // Calculate subscription expiry date
     let subscriptionExpiresAt = new Date();
     if (plan === 'monthly') {
       subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
-    } else {
+    } else if (plan === 'annual') {
       subscriptionExpiresAt.setFullYear(subscriptionExpiresAt.getFullYear() + 1);
     }
 
@@ -199,30 +105,20 @@ router.get('/verify/:reference', authenticateToken, async (req, res) => {
         subscriptionExpiresAt: subscriptionExpiresAt,
         subscriptionStartedAt: new Date(),
         paystackReference: reference,
-        lastPaymentAmount: transaction.amount / 100, // Store in Naira
-        $push: {
-          paymentHistory: {
-            reference: reference,
-            amount: transaction.amount / 100,
-            date: new Date(),
-            status: 'success',
-            plan: plan
-          }
-        }
+        lastPaymentAmount: transaction.amount / 100 // Store in Naira
       },
-      { new: true, select: 'email isPremium subscriptionPlan subscriptionExpiresAt' }
+      { new: true, select: 'id email isPremium subscriptionPlan subscriptionExpiresAt' }
     );
 
     res.json({
       success: true,
       message: 'Premium subscription activated successfully!',
-      data: {
-        user: {
-          email: updatedUser.email,
-          isPremium: updatedUser.isPremium,
-          subscriptionPlan: updatedUser.subscriptionPlan,
-          subscriptionExpiresAt: updatedUser.subscriptionExpiresAt
-        }
+      user: {
+        id: updatedUser._id,
+        email: updatedUser.email,
+        isPremium: updatedUser.isPremium,
+        subscriptionPlan: updatedUser.subscriptionPlan,
+        subscriptionExpiresAt: updatedUser.subscriptionExpiresAt
       }
     });
 
@@ -230,27 +126,30 @@ router.get('/verify/:reference', authenticateToken, async (req, res) => {
     console.error('Payment verification error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error verifying payment',
       error: error.message
     });
   }
 });
 
 /**
- * POST /api/payments/webhook
- * Handle Paystack webhook events
+ * POST /api/paystack-webhook
+ * Receive and process webhook events from Paystack
+ * 
+ * Body: Paystack webhook event (JSON)
  * 
  * Events processed:
- *   - charge.success
- *   - charge.failed
+ *   - charge.success: Update user premium status
+ *   - charge.failed: Log payment failure
  */
-router.post('/webhook', express.json(), async (req, res) => {
+router.post('/paystack-webhook', express.json(), async (req, res) => {
   try {
-    // Verify webhook signature
     const signature = req.headers['x-paystack-signature'];
+    const body = JSON.stringify(req.body);
+
+    // Verify webhook signature
     const hash = crypto
       .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
-      .update(JSON.stringify(req.body))
+      .update(body)
       .digest('hex');
 
     if (hash !== signature) {
@@ -260,18 +159,18 @@ router.post('/webhook', express.json(), async (req, res) => {
 
     const event = req.body;
 
-    // Handle charge.success
+    // Handle charge.success event
     if (event.event === 'charge.success') {
       const transaction = event.data;
       const userId = transaction.metadata?.userId;
-      const plan = transaction.metadata?.plan;
+      const plan = transaction.metadata?.plan || 'monthly';
 
       if (!userId) {
         console.error('No userId in webhook metadata');
         return res.status(400).json({ error: 'Missing userId' });
       }
 
-      // Calculate expiry
+      // Calculate expiry date
       let expiryDate = new Date();
       if (plan === 'monthly') {
         expiryDate.setMonth(expiryDate.getMonth() + 1);
@@ -286,44 +185,19 @@ router.post('/webhook', express.json(), async (req, res) => {
         subscriptionExpiresAt: expiryDate,
         subscriptionStartedAt: new Date(),
         paystackReference: transaction.reference,
-        lastPaymentAmount: transaction.amount / 100,
-        $push: {
-          paymentHistory: {
-            reference: transaction.reference,
-            amount: transaction.amount / 100,
-            date: new Date(),
-            status: 'success',
-            plan: plan
-          }
-        }
+        lastPaymentAmount: transaction.amount / 100
       });
 
-      console.log(`✅ Webhook: Payment successful for user ${userId}`);
+      console.log(`✅ Webhook: Payment successful for user ${userId} - Reference: ${transaction.reference}`);
     }
 
-    // Handle charge.failed
+    // Handle charge.failed event
     if (event.event === 'charge.failed') {
-      const transaction = event.data;
-      const userId = transaction.metadata?.userId;
-
-      if (userId) {
-        await User.findByIdAndUpdate(userId, {
-          $push: {
-            paymentHistory: {
-              reference: transaction.reference,
-              amount: transaction.amount / 100,
-              date: new Date(),
-              status: 'failed',
-              plan: transaction.metadata?.plan
-            }
-          }
-        });
-      }
-
-      console.log(`❌ Webhook: Payment failed - Reference: ${transaction.reference}`);
+      console.log(`❌ Webhook: Payment failed - Reference: ${event.data.reference}`);
     }
 
-    res.json({ status: 'success' });
+    // Always return success to acknowledge receipt
+    res.json({ status: 'success', message: 'Webhook processed' });
 
   } catch (error) {
     console.error('Webhook processing error:', error);
@@ -332,33 +206,34 @@ router.post('/webhook', express.json(), async (req, res) => {
 });
 
 /**
- * GET /api/payments/subscription-status
- * Get current user subscription status
+ * GET /api/subscription-status
+ * Get current user's subscription status
+ * 
+ * Headers:
+ *   - Authorization: Bearer {token}
  * 
  * Returns:
- *   - isPremium (boolean)
- *   - subscriptionPlan (string)
- *   - subscriptionExpiresAt (date)
- *   - daysRemaining (number)
+ *   - isPremium (boolean): Current premium status
+ *   - subscriptionPlan (string): 'monthly' or 'annual'
+ *   - subscriptionExpiresAt (date): When subscription expires
+ *   - daysRemaining (number): Days until expiration
  */
-router.get('/subscription-status', authenticateToken, async (req, res) => {
+router.get('/subscription-status', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select(
+    const userId = req.user.id;
+    const user = await User.findById(userId).select(
       'isPremium subscriptionPlan subscriptionExpiresAt'
     );
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if subscription expired
+    // Check if subscription has expired
     if (user.isPremium && user.subscriptionExpiresAt) {
       if (new Date() > user.subscriptionExpiresAt) {
+        // Subscription expired, downgrade user
         user.isPremium = false;
-        user.subscriptionPlan = 'none';
         await user.save();
       }
     }
@@ -366,67 +241,56 @@ router.get('/subscription-status', authenticateToken, async (req, res) => {
     // Calculate days remaining
     let daysRemaining = 0;
     if (user.isPremium && user.subscriptionExpiresAt) {
-      const msPerDay = 1000 * 60 * 60 * 24;
-      daysRemaining = Math.ceil((user.subscriptionExpiresAt - new Date()) / msPerDay);
+      daysRemaining = Math.ceil(
+        (user.subscriptionExpiresAt - new Date()) / (1000 * 60 * 60 * 24)
+      );
     }
 
     res.json({
-      success: true,
-      data: {
-        isPremium: user.isPremium,
-        subscriptionPlan: user.subscriptionPlan,
-        subscriptionExpiresAt: user.subscriptionExpiresAt,
-        daysRemaining: Math.max(0, daysRemaining)
-      }
+      isPremium: user.isPremium,
+      subscriptionPlan: user.subscriptionPlan,
+      subscriptionExpiresAt: user.subscriptionExpiresAt,
+      daysRemaining: Math.max(0, daysRemaining)
     });
 
   } catch (error) {
     console.error('Subscription status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching subscription status',
-      error: error.message
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
 /**
- * POST /api/payments/cancel-subscription
- * Cancel user premium subscription
+ * POST /api/cancel-subscription
+ * Cancel user's premium subscription
+ * 
+ * Headers:
+ *   - Authorization: Bearer {token}
  * 
  * Returns:
- *   - success (boolean)
- *   - message (string)
+ *   - success (boolean): Whether cancellation was successful
+ *   - message (string): Confirmation message
  */
-router.post('/cancel-subscription', authenticateToken, async (req, res) => {
+router.post('/cancel-subscription', auth, async (req, res) => {
   try {
+    const userId = req.user.id;
+
     const user = await User.findByIdAndUpdate(
-      req.user._id,
+      userId,
       {
         isPremium: false,
-        subscriptionPlan: 'none',
-        subscriptionExpiresAt: null,
-        $push: {
-          paymentHistory: {
-            reference: `cancel_${req.user._id}_${Date.now()}`,
-            date: new Date(),
-            status: 'cancelled',
-            amount: 0
-          }
-        }
+        subscriptionPlan: null,
+        subscriptionExpiresAt: null
       },
-      { new: true, select: 'email isPremium subscriptionPlan' }
+      { new: true, select: 'id email isPremium' }
     );
 
     res.json({
       success: true,
       message: 'Subscription cancelled successfully',
-      data: {
-        user: {
-          email: user.email,
-          isPremium: user.isPremium,
-          subscriptionPlan: user.subscriptionPlan
-        }
+      user: {
+        id: user._id,
+        email: user.email,
+        isPremium: user.isPremium
       }
     });
 
@@ -434,7 +298,6 @@ router.post('/cancel-subscription', authenticateToken, async (req, res) => {
     console.error('Subscription cancellation error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error cancelling subscription',
       error: error.message
     });
   }
