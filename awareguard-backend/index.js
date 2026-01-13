@@ -6,11 +6,13 @@ import reportRoute from "./routes/report.js";
 import authRoute from "./routes/auth.js";
 import learningRoute from "./routes/learning.js";
 import leadsRoute from "./routes/leads.js";
-import paymentRoute from  "./routes/payments.js";
+import paymentRoute from "./routes/payments.js";
 
 // 🔹 NEW IMPORTS
 import { connectDB } from "./config/db.js";
 import storiesRoute from "./routes/stories.js";
+import quizzesRoute from "./routes/api/quizzes.js";
+import configRoute from "./routes/config.js";
 
 config();
 
@@ -38,6 +40,12 @@ app.use("/api/payments", paymentRoute);
 
 // 🔹 NEW STORIES ROUTE
 app.use("/api/stories", storiesRoute);
+
+// 🔹 QUIZ ROUTES
+app.use("/api/quizzes", quizzesRoute);
+
+// 🔹 CONFIG ROUTES (for frontend)
+app.use("/api/config", configRoute);
 
 // 🔹 SIMPLE HEALTH CHECK
 app.get("/", (req, res) => {
