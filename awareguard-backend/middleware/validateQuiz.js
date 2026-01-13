@@ -52,4 +52,4 @@ const validateQuiz = (req, res, next) => {
   next();
 };
 
-module.exports = validateQuiz;
+export default validateQuiz;
