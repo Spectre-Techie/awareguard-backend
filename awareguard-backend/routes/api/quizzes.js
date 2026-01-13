@@ -9,11 +9,11 @@
  * GET  /api/quizzes/user/:userId/module/:moduleId - Get attempts for module
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const auth = require('../../middleware/auth');
-const validateQuiz = require('../../middleware/validateQuiz');
-const quizController = require('../../controllers/quizController');
+import { authMiddleware } from '../../middleware/auth.js';
+import validateQuiz from '../../middleware/validateQuiz.js';
+import * as quizController from '../../controllers/quizController.js';
 
 /**
  * GET /api/quizzes/:moduleId
@@ -31,9 +31,9 @@ const quizController = require('../../controllers/quizController');
 router.get('/:moduleId', async (req, res) => {
   try {
     const { moduleId } = req.params;
-    
+
     const questions = await quizController.getQuizQuestions(moduleId);
-    
+
     if (!questions || questions.length === 0) {
       return res.status(404).json({
         message: 'No quiz found for this module',
@@ -92,7 +92,7 @@ router.get('/:moduleId', async (req, res) => {
  *   - answers (array): Detailed answer breakdown
  *   - feedback (array): Explanation for each question
  */
-router.post('/:quizId/submit', auth, validateQuiz, async (req, res) => {
+router.post('/:quizId/submit', authMiddleware, validateQuiz, async (req, res) => {
   try {
     const { quizId } = req.params;
     const { moduleId, answers, timeSpentSeconds } = req.body;
@@ -157,7 +157,7 @@ router.post('/:quizId/submit', auth, validateQuiz, async (req, res) => {
  *   - totalAttempts (number): Total quiz attempts ever
  *   - passRate (number): Percentage of quizzes passed
  */
-router.get('/user/:userId/attempts', auth, async (req, res) => {
+router.get('/user/:userId/attempts', authMiddleware, async (req, res) => {
   try {
     const { userId } = req.params;
     const { limit = 20, offset = 0 } = req.query;
@@ -207,7 +207,7 @@ router.get('/user/:userId/attempts', auth, async (req, res) => {
  *   - totalAttempts (number): Number of attempts
  *   - passed (boolean): Has user ever passed this quiz
  */
-router.get('/user/:userId/module/:moduleId', auth, async (req, res) => {
+router.get('/user/:userId/module/:moduleId', authMiddleware, async (req, res) => {
   try {
     const { userId, moduleId } = req.params;
 
@@ -270,4 +270,4 @@ router.get('/stats/module/:moduleId', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
