@@ -6,7 +6,7 @@
  * Enhanced to support quiz tracking and detailed progress metrics
  */
 
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const completedLessonSchema = new mongoose.Schema({
   lessonId: String,
@@ -163,11 +163,11 @@ userProgressSchema.index({ level: -1 });
 userProgressSchema.index({ 'completedModules.completedAt': -1 });
 
 // Pre-save hook to calculate level from XP
-userProgressSchema.pre('save', function(next) {
+userProgressSchema.pre('save', function (next) {
   // Level = floor(totalXP / 500) + 1
   this.level = Math.floor(this.totalXP / 500) + 1;
   this.updatedAt = new Date();
   next();
 });
 
-module.exports = mongoose.model('UserProgress', userProgressSchema);
+export const UserProgress = mongoose.model('UserProgress', userProgressSchema);
