@@ -5,8 +5,8 @@
  * Handles quiz scoring, XP calculations, and progress tracking
  */
 
-const Quiz = require('../models/Quiz');
-const UserProgress = require('../models/UserProgress');
+import { Quiz } from '../models/Quiz.js';
+import { UserProgress } from '../models/UserProgress.js';
 
 /**
  * Get quiz questions for a module
@@ -28,7 +28,7 @@ async function getQuizQuestions(moduleId) {
 async function scoreQuiz(moduleId, userAnswers, userId, timeSpent) {
   try {
     const questions = await Quiz.find({ moduleId });
-    
+
     if (!questions || questions.length === 0) {
       throw new Error('Quiz not found');
     }
@@ -40,12 +40,12 @@ async function scoreQuiz(moduleId, userAnswers, userId, timeSpent) {
     // Grade each answer
     for (let answer of userAnswers) {
       const question = questions.find(q => q.questionId === answer.questionId);
-      
+
       if (!question) continue;
 
       const isCorrect = question.correctAnswer === answer.selectedOption;
       const pointsForQuestion = question.points || 10;
-      
+
       totalPoints += pointsForQuestion;
       if (isCorrect) {
         earnedPoints += pointsForQuestion;
@@ -56,15 +56,15 @@ async function scoreQuiz(moduleId, userAnswers, userId, timeSpent) {
         selectedOption: answer.selectedOption,
         correct: isCorrect,
         points: pointsForQuestion,
-        explanation: isCorrect 
-          ? question.correctExplanation 
+        explanation: isCorrect
+          ? question.correctExplanation
           : question.incorrectExplanations?.find(e => e.optionIndex === answer.selectedOption)?.explanation
       });
     }
 
     const percentage = Math.round((earnedPoints / totalPoints) * 100);
     const passed = percentage >= 70; // 70% passing score
-    
+
     // Calculate XP bonus
     // Base: 30% of module XP for passing
     // Module data needs to be looked up for XP value
@@ -95,14 +95,14 @@ async function scoreQuiz(moduleId, userAnswers, userId, timeSpent) {
 async function saveQuizSubmission(userId, moduleId, scoreResult, timeSpent) {
   try {
     const userProgress = await UserProgress.findOne({ userId });
-    
+
     if (!userProgress) {
       throw new Error('User progress not found');
     }
 
     // Find or create completed module record
     let completedModule = userProgress.completedModules.find(m => m.moduleId === moduleId);
-    
+
     if (!completedModule) {
       completedModule = {
         moduleId,
@@ -132,7 +132,7 @@ async function saveQuizSubmission(userId, moduleId, scoreResult, timeSpent) {
       userProgress.statistics.totalQuizzesPass += 1;
     }
     userProgress.statistics.lastQuizCompletedAt = new Date();
-    
+
     // Update average quiz score
     const allAttempts = userProgress.completedModules
       .flatMap(m => m.quizAttempts || []);
@@ -153,19 +153,19 @@ async function saveQuizSubmission(userId, moduleId, scoreResult, timeSpent) {
 async function awardQuizXP(userId, moduleId, xpEarned) {
   try {
     const userProgress = await UserProgress.findOne({ userId });
-    
+
     if (!userProgress) {
       throw new Error('User progress not found');
     }
 
     // Add XP
     userProgress.totalXP += xpEarned;
-    
+
     // Level will be calculated by pre-save hook
     // this.level = Math.floor(this.totalXP / 500) + 1;
 
     await userProgress.save();
-    
+
     return {
       totalXP: userProgress.totalXP,
       level: userProgress.level,
@@ -183,13 +183,13 @@ async function awardQuizXP(userId, moduleId, xpEarned) {
 async function getUserQuizAttempts(userId, limit = 20, offset = 0) {
   try {
     const userProgress = await UserProgress.findOne({ userId });
-    
+
     if (!userProgress) {
       return { data: [], total: 0, passRate: 0 };
     }
 
     const allAttempts = userProgress.completedModules
-      .flatMap(module => 
+      .flatMap(module =>
         (module.quizAttempts || []).map(attempt => ({
           ...attempt,
           moduleId: module.moduleId
@@ -198,7 +198,7 @@ async function getUserQuizAttempts(userId, limit = 20, offset = 0) {
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
     const passedCount = allAttempts.filter(a => a.passed).length;
-    const passRate = allAttempts.length > 0 
+    const passRate = allAttempts.length > 0
       ? Math.round((passedCount / allAttempts.length) * 100)
       : 0;
 
@@ -221,7 +221,7 @@ async function getUserQuizAttempts(userId, limit = 20, offset = 0) {
 async function getModuleQuizAttempts(userId, moduleId) {
   try {
     const userProgress = await UserProgress.findOne({ userId });
-    
+
     if (!userProgress) {
       return {
         attempts: [],
@@ -234,7 +234,7 @@ async function getModuleQuizAttempts(userId, moduleId) {
     }
 
     const completedModule = userProgress.completedModules.find(m => m.moduleId === moduleId);
-    
+
     if (!completedModule || !completedModule.quizAttempts) {
       return {
         attempts: [],
@@ -247,7 +247,7 @@ async function getModuleQuizAttempts(userId, moduleId) {
     }
 
     const attempts = completedModule.quizAttempts;
-    const bestScore = attempts.length > 0 
+    const bestScore = attempts.length > 0
       ? Math.max(...attempts.map(a => a.percentage))
       : 0;
     const averageScore = attempts.length > 0
@@ -318,7 +318,7 @@ function calculateMedian(scores) {
     : sorted[mid];
 }
 
-module.exports = {
+export {
   getQuizQuestions,
   scoreQuiz,
   saveQuizSubmission,
