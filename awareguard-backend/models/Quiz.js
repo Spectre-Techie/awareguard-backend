@@ -6,7 +6,7 @@
  * Used by quizzes.js routes to serve questions and validate answers.
  */
 
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const quizAnswerSchema = new mongoose.Schema({
   optionIndex: {
@@ -95,4 +95,4 @@ const quizQuestionSchema = new mongoose.Schema({
 // Index for quick lookups
 quizQuestionSchema.index({ moduleId: 1, type: 1 });
 
-module.exports = mongoose.model('Quiz', quizQuestionSchema);
+export const Quiz = mongoose.model('Quiz', quizQuestionSchema);
