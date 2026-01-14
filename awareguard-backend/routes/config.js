@@ -11,8 +11,8 @@ const router = express.Router();
 router.get('/paystack', (req, res) => {
     res.json({
         publicKey: process.env.PAYSTACK_PUBLIC_KEY,
-        monthlyAmount: 9999,
-        annualAmount: 99999
+        monthlyAmount: 5000,
+        annualAmount: 60000
     });
 });
 
