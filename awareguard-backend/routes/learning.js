@@ -6,23 +6,34 @@ import { User } from "../models/User.js";
 const router = express.Router();
 
 // ===== MODULE DEFINITIONS (Source of Truth for XP values) =====
-// These match the frontend learningData.js XP values
+// ALL modules from frontend learningData.js
 const MODULES = {
-  // Beginner Path
+  // ===== BEGINNER PATH (FREE) =====
   "phishing-basics": { xp: 10, premium: false, title: "Phishing Awareness 101" },
   "password-security": { xp: 12, premium: false, title: "Password Security Essentials" },
   "job-scam": { xp: 15, premium: false, title: "Job Scam Detection" },
   "social-media-safety": { xp: 12, premium: false, title: "Social Media Security Essentials" },
   "online-shopping-security": { xp: 10, premium: false, title: "Online Shopping & Payment Security" },
+  "device-security": { xp: 14, premium: false, title: "Device & Network Security" },
+  "privacy-basics": { xp: 12, premium: false, title: "Digital Privacy Fundamentals" },
 
-  // Intermediate & Expert Paths (Premium)
+  // ===== INTERMEDIATE PATH (PREMIUM) =====
+  "email-security": { xp: 18, premium: true, title: "Advanced Email Security" },
   "social-engineering": { xp: 25, premium: true, title: "Social Engineering Tactics" },
   "identity-theft": { xp: 20, premium: true, title: "Identity Theft Prevention" },
   "advanced-phishing": { xp: 25, premium: true, title: "Advanced Phishing Detection" },
   "financial-fraud": { xp: 30, premium: true, title: "Financial Fraud & Investment Scams" },
   "mobile-security": { xp: 20, premium: true, title: "Mobile Device Security" },
+  "data-protection": { xp: 22, premium: true, title: "Data Protection & Encryption" },
+  "secure-communication": { xp: 20, premium: true, title: "Secure Communication Practices" },
+
+  // ===== EXPERT PATH (PREMIUM) =====
   "corporate-security": { xp: 35, premium: true, title: "Corporate Security Best Practices" },
-  "incident-response": { xp: 40, premium: true, title: "Incident Response & Recovery" }
+  "incident-response": { xp: 40, premium: true, title: "Incident Response & Recovery" },
+  "threat-intelligence": { xp: 35, premium: true, title: "Threat Intelligence & Analysis" },
+  "cloud-security": { xp: 30, premium: true, title: "Cloud Security Fundamentals" },
+  "compliance": { xp: 28, premium: true, title: "Security Compliance & Regulations" },
+  "penetration-testing": { xp: 40, premium: true, title: "Penetration Testing Basics" },
 };
 
 /**
@@ -224,11 +235,18 @@ router.get("/stats", authMiddleware, async (req, res) => {
     const completedCount = user.completedModules?.length || 0;
     const completionPercentage = Math.round((completedCount / totalModules) * 100);
 
-    // XP to next level
-    const currentLevelXP = (user.level - 1) * 500;
-    const nextLevelXP = user.level * 500;
-    const xpToNextLevel = nextLevelXP - user.totalXP;
-    const levelProgress = Math.round(((user.totalXP - currentLevelXP) / 500) * 100);
+    // XP to next level (using new balanced thresholds)
+    const thresholds = [0, 60, 100, 200, 350, 550, 800, 1100, 1450, 1850];
+    const currentLevel = user.level || 1;
+    const currentThreshold = thresholds[currentLevel - 1] || 0;
+    const nextThreshold = currentLevel < 10
+      ? thresholds[currentLevel]
+      : currentThreshold + 500;
+
+    const xpToNextLevel = nextThreshold - user.totalXP;
+    const xpInLevel = user.totalXP - currentThreshold;
+    const xpNeeded = nextThreshold - currentThreshold;
+    const levelProgress = Math.round((xpInLevel / xpNeeded) * 100);
 
     res.json({
       learningStats: {
