@@ -16,7 +16,7 @@ const MODULES = {
   "online-shopping-security": { xp: 10, premium: false, title: "Online Shopping & Payment Security" },
   "device-security": { xp: 14, premium: false, title: "Device & Network Security" },
   "privacy-basics": { xp: 12, premium: false, title: "Digital Privacy Fundamentals" },
-  "email-security": { xp: 18, premium: true, title: "Advanced Email Security" },
+  "email-security": { xp: 18, premium: false, title: "Advanced Email Security" },
 
   // ===== INTERMEDIATE PATH (PREMIUM) =====
   "social-engineering": { xp: 25, premium: true, title: "Social Engineering Tactics" },
