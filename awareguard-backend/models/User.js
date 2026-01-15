@@ -189,9 +189,34 @@ userSchema.methods.addPaymentHistory = function (reference, amount, plan, status
 
 // ===== LEARNING PROGRESS METHODS =====
 
-// Calculate level from XP (500 XP per level)
+/**
+ * Calculate level from XP - BALANCED PROGRESSION
+ * Level 1: 0-50 XP | Level 2: 50-100 XP | Level 3: 100-200 XP
+ * Level 4: 200-350 XP | Level 5: 350-550 XP | Level 6+: scaling
+ */
 userSchema.methods.calculateLevel = function () {
-  return Math.floor(this.totalXP / 500) + 1;
+  const xp = this.totalXP || 0;
+
+  // Level thresholds (cumulative XP needed to reach that level)
+  const thresholds = [0, 50, 100, 200, 350, 550, 800, 1100, 1450, 1850];
+
+  // Find the highest level threshold the user has passed
+  let level = 1;
+  for (let i = thresholds.length - 1; i >= 0; i--) {
+    if (xp >= thresholds[i]) {
+      level = i + 1;
+      break;
+    }
+  }
+
+  // For XP beyond level 10, add a level every 500 XP
+  if (xp >= 1850) {
+    const extraXP = xp - 1850;
+    const extraLevels = Math.floor(extraXP / 500);
+    level = 10 + extraLevels;
+  }
+
+  return level;
 };
 
 // Update streak based on last activity
