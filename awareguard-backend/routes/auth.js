@@ -204,28 +204,47 @@ router.post("/reset-password/:token", async (req, res) => {
   }
 });
 
-// ===== GOOGLE OAUTH ROUTE (TO BE IMPLEMENTED) =====
+// ===== GOOGLE OAUTH ROUTES =====
 
-/*
-  Placeholder route for Google Sign-In token verification:
-  Client obtains id_token from Google Sign-In and sends here.
-  Backend should verify token with Google OAuth2 API (or use google-auth-library).
-  For now: a stub returning success; replace with proper verification.
-*/
-router.post("/google", async (req, res) => {
-  try {
-    const { id_token } = req.body;
-    if (!id_token) return res.status(400).json({ error: "id_token required" });
+import passportConfig from '../config/passport.js';
 
-    // TODO: verify token with Google: use google-auth-library to verify
-    // If valid, get email and name, create or retrieve the user and return JWT.
+/**
+ * GET /api/auth/google
+ * Initiate Google OAuth flow
+ */
+router.get('/google', passportConfig.authenticate('google', {
+  scope: ['profile', 'email'],
+  session: false
+}));
 
-    // Temporary: return error to remind to implement properly.
-    return res.status(501).json({ error: "Google sign-in not configured on backend. See README." });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Google signin failed" });
+/**
+ * GET /api/auth/google/callback
+ * Google OAuth callback - handle success/failure
+ */
+router.get('/google/callback',
+  passportConfig.authenticate('google', { session: false, failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/signin?error=oauth_failed` }),
+  (req, res) => {
+    try {
+      // User authenticated successfully via Google
+      const user = req.user;
+
+      // Generate JWT token
+      const token = createToken(user);
+
+      // Redirect to frontend with token
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/auth/google/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isPremium: user.isPremium
+      }))}`);
+    } catch (err) {
+      console.error('❌ Google OAuth callback error:', err);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/signin?error=oauth_callback_failed`);
+    }
   }
-});
+);
 
 export default router;
