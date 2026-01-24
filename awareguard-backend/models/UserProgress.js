@@ -156,7 +156,7 @@ const userProgressSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-userProgressSchema.index({ userId: 1 });
+// userId index is handled automatically by 'unique: true' in the schema definition above
 userProgressSchema.index({ totalXP: -1 }); // For leaderboards
 userProgressSchema.index({ level: -1 });
 userProgressSchema.index({ 'completedModules.completedAt': -1 });
