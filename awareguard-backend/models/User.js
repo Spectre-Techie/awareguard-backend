@@ -120,7 +120,37 @@ const userSchema = new mongoose.Schema(
         totalQuestions: Number,
         date: { type: Date, default: Date.now }
       }
-    ]
+    ],
+
+    // ===== PASSWORD RESET FIELDS =====
+
+    // Token for password reset (hashed)
+    passwordResetToken: {
+      type: String,
+      default: null
+    },
+
+    // When the reset token expires
+    passwordResetExpires: {
+      type: Date,
+      default: null
+    },
+
+    // ===== OAUTH FIELDS =====
+
+    // Google OAuth ID
+    googleId: {
+      type: String,
+      default: null,
+      sparse: true,
+      unique: true
+    },
+
+    // Email verification status
+    emailVerified: {
+      type: Boolean,
+      default: false
+    }
   },
   { timestamps: true }
 );
@@ -198,7 +228,7 @@ userSchema.methods.calculateLevel = function () {
   const xp = this.totalXP || 0;
 
   // Level thresholds (cumulative XP needed to reach that level)
-  const thresholds = [0, 60, 100, 200, 350, 550, 800, 1100, 1450, 1850];
+  const thresholds = [0, 50, 100, 200, 350, 550, 800, 1100, 1450, 1850];
 
   // Find the highest level threshold the user has passed
   let level = 1;
