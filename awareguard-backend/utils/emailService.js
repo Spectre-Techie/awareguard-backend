@@ -10,14 +10,14 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  * @param {string} userName - User's name
  */
 export async function sendPasswordResetEmail(email, resetToken, userName = 'User') {
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
-    try {
-        const { data, error } = await resend.emails.send({
-            from: 'AwareGuard <noreply@awareguard.com>',
-            to: email,
-            subject: 'Reset Your Password - AwareGuard',
-            html: `
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'AwareGuard <onboarding@resend.dev>',
+      to: email,
+      subject: 'Reset Your Password - AwareGuard',
+      html: `
         <!DOCTYPE html>
         <html>
         <head>
@@ -109,19 +109,19 @@ export async function sendPasswordResetEmail(email, resetToken, userName = 'User
         </body>
         </html>
       `
-        });
+    });
 
-        if (error) {
-            console.error('❌ Resend error:', error);
-            throw new Error(`Failed to send email: ${error.message}`);
-        }
-
-        console.log('✅ Password reset email sent:', data);
-        return data;
-    } catch (error) {
-        console.error('❌ Error sending password reset email:', error);
-        throw error;
+    if (error) {
+      console.error('❌ Resend error:', error);
+      throw new Error(`Failed to send email: ${error.message}`);
     }
+
+    console.log('✅ Password reset email sent:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error sending password reset email:', error);
+    throw error;
+  }
 }
 
 /**
@@ -130,12 +130,12 @@ export async function sendPasswordResetEmail(email, resetToken, userName = 'User
  * @param {string} userName - User's name
  */
 export async function sendPasswordResetConfirmation(email, userName = 'User') {
-    try {
-        const { data, error } = await resend.emails.send({
-            from: 'AwareGuard <noreply@awareguard.com>',
-            to: email,
-            subject: 'Password Successfully Reset - AwareGuard',
-            html: `
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'AwareGuard <onboarding@resend.dev>',
+      to: email,
+      subject: 'Password Successfully Reset - AwareGuard',
+      html: `
         <!DOCTYPE html>
         <html>
         <head>
@@ -189,19 +189,19 @@ export async function sendPasswordResetConfirmation(email, userName = 'User') {
         </body>
         </html>
       `
-        });
+    });
 
-        if (error) {
-            console.error('❌ Resend error:', error);
-            throw new Error(`Failed to send email: ${error.message}`);
-        }
-
-        console.log('✅ Password reset confirmation sent:', data);
-        return data;
-    } catch (error) {
-        console.error('❌ Error sending confirmation email:', error);
-        throw error;
+    if (error) {
+      console.error('❌ Resend error:', error);
+      throw new Error(`Failed to send email: ${error.message}`);
     }
+
+    console.log('✅ Password reset confirmation sent:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error sending confirmation email:', error);
+    throw error;
+  }
 }
 
 /**
@@ -210,12 +210,12 @@ export async function sendPasswordResetConfirmation(email, userName = 'User') {
  * @param {string} userName - User's name
  */
 export async function sendWelcomeEmail(email, userName = 'User') {
-    try {
-        const { data, error } = await resend.emails.send({
-            from: 'AwareGuard <welcome@awareguard.com>',
-            to: email,
-            subject: 'Welcome to AwareGuard! 🎉',
-            html: `
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'AwareGuard <welcome@awareguard.com>',
+      to: email,
+      subject: 'Welcome to AwareGuard! 🎉',
+      html: `
         <!DOCTYPE html>
         <html>
         <head>
@@ -285,19 +285,19 @@ export async function sendWelcomeEmail(email, userName = 'User') {
         </body>
         </html>
       `
-        });
+    });
 
-        if (error) {
-            console.error('❌ Resend error:', error);
-            // Don't throw - welcome email is not critical
-            return null;
-        }
-
-        console.log('✅ Welcome email sent:', data);
-        return data;
-    } catch (error) {
-        console.error('❌ Error sending welcome email:', error);
-        // Don't throw - welcome email is not critical
-        return null;
+    if (error) {
+      console.error('❌ Resend error:', error);
+      // Don't throw - welcome email is not critical
+      return null;
     }
+
+    console.log('✅ Welcome email sent:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error sending welcome email:', error);
+    // Don't throw - welcome email is not critical
+    return null;
+  }
 }
