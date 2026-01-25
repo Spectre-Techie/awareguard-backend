@@ -203,6 +203,30 @@ router.post("/reset-password/:token", async (req, res) => {
     res.status(500).json({ error: "Failed to reset password" });
   }
 });
+// ONE-TIME FIX ENDPOINT - Remove after running
+router.post('/admin/fix-index', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const usersCollection = db.collection('users');
+    
+    // Drop old index
+    try {
+      await usersCollection.dropIndex('paystackReference_1');
+    } catch (err) {
+      // Ignore if doesn't exist
+    }
+    
+    // Create new sparse index
+    await usersCollection.createIndex(
+      { paystackReference: 1 },
+      { unique: true, sparse: true, name: 'paystackReference_sparse_1' }
+    );
+    
+    res.json({ success: true, message: 'Index fixed!' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ===== GOOGLE OAUTH ROUTES =====
 
