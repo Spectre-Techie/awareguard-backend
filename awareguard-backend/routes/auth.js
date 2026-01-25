@@ -1,6 +1,7 @@
 // awareguard-backend/routes/auth.js
 import express from "express";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordResetConfirmation } from "../utils/emailService.js";
 import { createPasswordResetToken, hashToken } from "../utils/tokenUtils.js";
@@ -203,30 +204,6 @@ router.post("/reset-password/:token", async (req, res) => {
     res.status(500).json({ error: "Failed to reset password" });
   }
 });
-// ONE-TIME FIX ENDPOINT - Remove after running
-router.post('/admin/fix-index', async (req, res) => {
-  try {
-    const db = mongoose.connection.db;
-    const usersCollection = db.collection('users');
-    
-    // Drop old index
-    try {
-      await usersCollection.dropIndex('paystackReference_1');
-    } catch (err) {
-      // Ignore if doesn't exist
-    }
-    
-    // Create new sparse index
-    await usersCollection.createIndex(
-      { paystackReference: 1 },
-      { unique: true, sparse: true, name: 'paystackReference_sparse_1' }
-    );
-    
-    res.json({ success: true, message: 'Index fixed!' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // ===== GOOGLE OAUTH ROUTES =====
 
@@ -266,9 +243,63 @@ router.get('/google/callback',
     } catch (err) {
       console.error('❌ Google OAuth callback error:', err);
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/signin?error=oauth_callback_failed`);
     }
   }
 );
+
+// ===== ADMIN ENDPOINT - ONE-TIME DATABASE FIX =====
+
+/**
+ * POST /api/auth/admin/fix-paystack-index
+ * ONE-TIME endpoint to fix the paystackReference duplicate key error
+ * Call this once, then remove this endpoint
+ */
+router.post('/admin/fix-paystack-index', async (req, res) => {
+  try {
+    console.log('🔧 Starting index fix...');
+
+    const db = mongoose.connection.db;
+    const usersCollection = db.collection('users');
+
+    // Drop old index if it exists
+    try {
+      await usersCollection.dropIndex('paystackReference_1');
+      console.log('✅ Dropped old paystackReference_1 index');
+    } catch (err) {
+      if (err.code === 27 || err.message.includes('index not found')) {
+        console.log('ℹ️  Old index does not exist (already fixed)');
+      } else {
+        throw err;
+      }
+    }
+
+    // Create new sparse unique index
+    await usersCollection.createIndex(
+      { paystackReference: 1 },
+      {
+        unique: true,
+        sparse: true,  // Allows multiple null values
+        name: 'paystackReference_sparse_1'
+      }
+    );
+    console.log('✅ Created new sparse unique index');
+
+    // Get all indexes to verify
+    const indexes = await usersCollection.indexes();
+    const paystackIndex = indexes.find(idx => idx.name === 'paystackReference_sparse_1');
+
+    res.json({
+      success: true,
+      message: 'Index fixed successfully! Signup should now work.',
+      indexDetails: paystackIndex
+    });
+  } catch (error) {
+    console.error('❌ Error fixing index:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 export default router;
