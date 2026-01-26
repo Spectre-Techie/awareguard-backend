@@ -14,7 +14,7 @@ export async function sendPasswordResetEmail(email, resetToken, userName = 'User
 
   try {
     const { data, error } = await resend.emails.send({
-      from: 'AwareGuard <onboarding@resend.dev>',
+      from: 'AwareGuard <noreply@awareguard.me>',
       to: email,
       subject: 'Reset Your Password - AwareGuard',
       html: `
@@ -132,7 +132,7 @@ export async function sendPasswordResetEmail(email, resetToken, userName = 'User
 export async function sendPasswordResetConfirmation(email, userName = 'User') {
   try {
     const { data, error } = await resend.emails.send({
-      from: 'AwareGuard <onboarding@resend.dev>',
+      from: 'AwareGuard <noreply@awareguard.me>',
       to: email,
       subject: 'Password Successfully Reset - AwareGuard',
       html: `
@@ -212,7 +212,7 @@ export async function sendPasswordResetConfirmation(email, userName = 'User') {
 export async function sendWelcomeEmail(email, userName = 'User') {
   try {
     const { data, error } = await resend.emails.send({
-      from: 'AwareGuard <welcome@awareguard.com>',
+      from: 'AwareGuard <welcome@awareguard.me>',
       to: email,
       subject: 'Welcome to AwareGuard! 🎉',
       html: `
