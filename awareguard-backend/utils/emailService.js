@@ -10,7 +10,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
  * @param {string} userName - User's name
  */
 export async function sendPasswordResetEmail(email, resetToken, userName = 'User') {
-  const frontendUrl = process.env.FRONTEND_URL || 'https://awareguard.me';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
   try {
