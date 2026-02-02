@@ -256,20 +256,28 @@ router.get('/google/callback',
  */
 router.post('/admin/fix-paystack-index', async (req, res) => {
   try {
-    console.log('🔧 Starting index fix...');
+    console.log('🔧 Starting comprehensive index fix...');
 
     const db = mongoose.connection.db;
     const usersCollection = db.collection('users');
 
-    // Drop old index if it exists
-    try {
-      await usersCollection.dropIndex('paystackReference_1');
-      console.log('✅ Dropped old paystackReference_1 index');
-    } catch (err) {
-      if (err.code === 27 || err.message.includes('index not found')) {
-        console.log('ℹ️  Old index does not exist (already fixed)');
-      } else {
-        throw err;
+    // Get all existing indexes first
+    const existingIndexes = await usersCollection.indexes();
+    console.log('📋 Current indexes:', existingIndexes.map(idx => idx.name));
+
+    // Drop ALL paystackReference-related indexes
+    const paystackIndexNames = existingIndexes
+      .filter(idx => idx.name && idx.name.includes('paystackReference'))
+      .map(idx => idx.name);
+
+    const droppedIndexes = [];
+    for (const indexName of paystackIndexNames) {
+      try {
+        await usersCollection.dropIndex(indexName);
+        console.log(`✅ Dropped index: ${indexName}`);
+        droppedIndexes.push(indexName);
+      } catch (err) {
+        console.log(`⚠️  Could not drop ${indexName}:`, err.message);
       }
     }
 
@@ -284,14 +292,21 @@ router.post('/admin/fix-paystack-index', async (req, res) => {
     );
     console.log('✅ Created new sparse unique index');
 
-    // Get all indexes to verify
-    const indexes = await usersCollection.indexes();
-    const paystackIndex = indexes.find(idx => idx.name === 'paystackReference_sparse_1');
+    // Verify the fix
+    const newIndexes = await usersCollection.indexes();
+    const paystackIndex = newIndexes.find(idx => idx.name === 'paystackReference_sparse_1');
 
     res.json({
       success: true,
-      message: 'Index fixed successfully! Signup should now work.',
-      indexDetails: paystackIndex
+      message: 'Index fixed successfully! OAuth signup should now work.',
+      droppedIndexes,
+      newIndex: paystackIndex,
+      allIndexes: newIndexes.map(idx => ({
+        name: idx.name,
+        keys: idx.key,
+        sparse: idx.sparse,
+        unique: idx.unique
+      }))
     });
   } catch (error) {
     console.error('❌ Error fixing index:', error);
