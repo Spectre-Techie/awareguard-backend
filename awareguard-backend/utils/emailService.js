@@ -4,6 +4,21 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} str - String to escape
+ * @returns {string} - Escaped string
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
  * Send password reset email
  * @param {string} email - User's email address
  * @param {string} resetToken - Password reset token
@@ -300,5 +315,179 @@ export async function sendWelcomeEmail(email, userName = 'User') {
     console.error('❌ Error sending welcome email:', error);
     // Don't throw - welcome email is not critical
     return null;
+  }
+}
+
+/**
+ * Send contact form notification to admin
+ * @param {Object} contactData - Contact form data
+ * @param {string} contactData.name - Sender's name
+ * @param {string} contactData.email - Sender's email
+ * @param {string} contactData.company - Sender's company (optional)
+ * @param {string} contactData.inquiryType - Type of inquiry
+ * @param {string} contactData.message - Message content
+ * @param {string} contactData.submittedAt - Submission timestamp
+ */
+export async function sendContactNotification(contactData) {
+  const { name, email, company, inquiryType, message, submittedAt } = contactData;
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@awareguard.me';
+
+  // Map inquiry types to valid CSS classes
+  const inquiryTypeMap = {
+    'enterprise': 'badge-enterprise',
+    'general': 'badge-general',
+    'support': 'badge-support'
+  };
+  const badgeClass = inquiryTypeMap[inquiryType] || 'badge-general';
+
+  // Sanitize user inputs to prevent XSS
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeCompany = escapeHtml(company);
+  const safeInquiryType = escapeHtml(inquiryType);
+  // For message, preserve line breaks by replacing newlines before escaping
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
+  const safeSubmittedAt = escapeHtml(submittedAt);
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'AwareGuard Contact <notifications@awareguard.me>',
+      to: adminEmail,
+      replyTo: email,
+      subject: `New Contact Form Submission - ${safeInquiryType}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .container {
+              background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+              border-radius: 10px;
+              padding: 40px;
+              color: white;
+            }
+            .content {
+              background: white;
+              border-radius: 8px;
+              padding: 30px;
+              margin-top: 20px;
+              color: #333;
+            }
+            .field {
+              margin-bottom: 20px;
+            }
+            .label {
+              font-weight: 600;
+              color: #4b5563;
+              font-size: 14px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .value {
+              margin-top: 5px;
+              font-size: 16px;
+              color: #1f2937;
+            }
+            .message-box {
+              background: #f9fafb;
+              border-left: 4px solid #3b82f6;
+              padding: 15px;
+              border-radius: 4px;
+              margin-top: 5px;
+            }
+            .badge {
+              display: inline-block;
+              padding: 4px 12px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: 600;
+              text-transform: uppercase;
+            }
+            .badge-enterprise {
+              background: #fef3c7;
+              color: #92400e;
+            }
+            .badge-general {
+              background: #dbeafe;
+              color: #1e40af;
+            }
+            .badge-support {
+              background: #fecaca;
+              color: #991b1b;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1 style="margin: 0; font-size: 28px;">📨 New Contact Form Submission</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">AwareGuard Contact System</p>
+          </div>
+          
+          <div class="content">
+            <div class="field">
+              <div class="label">Inquiry Type</div>
+              <div class="value">
+                <span class="badge ${badgeClass}">${safeInquiryType}</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="label">Name</div>
+              <div class="value">${safeName}</div>
+            </div>
+
+            <div class="field">
+              <div class="label">Email</div>
+              <div class="value"><a href="mailto:${safeEmail}">${safeEmail}</a></div>
+            </div>
+
+            ${safeCompany ? `
+            <div class="field">
+              <div class="label">Company</div>
+              <div class="value">${safeCompany}</div>
+            </div>
+            ` : ''}
+
+            <div class="field">
+              <div class="label">Message</div>
+              <div class="message-box">${safeMessage}</div>
+            </div>
+
+            <div class="field">
+              <div class="label">Submitted At</div>
+              <div class="value">${safeSubmittedAt}</div>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+            
+            <p style="font-size: 14px; color: #666;">
+              <strong>Quick Actions:</strong><br>
+              Reply directly to this email to respond to ${safeName}.
+            </p>
+          </div>
+        </body>
+        </html>
+      `
+    });
+
+    if (error) {
+      console.error('❌ Resend error:', error);
+      throw new Error(`Failed to send notification: ${error.message}`);
+    }
+
+    console.log('✅ Contact notification sent to admin:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error sending contact notification:', error);
+    throw error;
   }
 }

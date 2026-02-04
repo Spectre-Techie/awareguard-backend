@@ -34,7 +34,7 @@ const router = express.Router();
 router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
   try {
     const { reference } = req.params;
-    const userId = req.user.id; // From auth middleware
+    const userId = req.user._id; // From auth middleware
 
     // Verify with Paystack API
     const paystackResponse = await fetch(
@@ -220,7 +220,7 @@ router.post('/paystack-webhook', express.json(), async (req, res) => {
  */
 router.get('/subscription-status', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id;
     const user = await User.findById(userId).select(
       'isPremium subscriptionPlan subscriptionExpiresAt'
     );
@@ -272,7 +272,7 @@ router.get('/subscription-status', authMiddleware, async (req, res) => {
  */
 router.post('/cancel-subscription', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const user = await User.findByIdAndUpdate(
       userId,

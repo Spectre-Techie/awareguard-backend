@@ -10,10 +10,11 @@
  */
 
 import express from 'express';
-const router = express.Router();
 import { authMiddleware } from '../../middleware/auth.js';
 import validateQuiz from '../../middleware/validateQuiz.js';
 import * as quizController from '../../controllers/quizController.js';
+
+const router = express.Router();
 
 /**
  * GET /api/quizzes/:moduleId
