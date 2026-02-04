@@ -13,6 +13,7 @@ import { connectDB } from "./config/db.js";
 import storiesRoute from "./routes/stories.js";
 import quizzesRoute from "./routes/api/quizzes.js";
 import configRoute from "./routes/config.js";
+import contactRoute from "./routes/contact.js";
 
 config();
 
@@ -46,6 +47,9 @@ app.use("/api/quizzes", quizzesRoute);
 
 // 🔹 CONFIG ROUTES (for frontend)
 app.use("/api/config", configRoute);
+
+// 🔹 CONTACT ROUTES
+app.use("/api/contact", contactRoute);
 
 // 🔹 SIMPLE HEALTH CHECK
 app.get("/", (req, res) => {
