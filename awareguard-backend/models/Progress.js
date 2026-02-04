@@ -1,4 +1,7 @@
 // awareguard-backend/models/Progress.js
+// NOTE: This model is currently UNUSED - UserProgress.js is used instead
+// This file is kept for backward compatibility but should be considered for removal
+// See UserProgress.js for the actively used progress tracking model
 import mongoose from "mongoose";
 
 const progressSchema = new mongoose.Schema({
