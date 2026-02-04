@@ -332,12 +332,21 @@ export async function sendContactNotification(contactData) {
   const { name, email, company, inquiryType, message, submittedAt } = contactData;
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@awareguard.me';
 
+  // Map inquiry types to valid CSS classes
+  const inquiryTypeMap = {
+    'enterprise': 'badge-enterprise',
+    'general': 'badge-general',
+    'support': 'badge-support'
+  };
+  const badgeClass = inquiryTypeMap[inquiryType] || 'badge-general';
+
   // Sanitize user inputs to prevent XSS
   const safeName = escapeHtml(name);
   const safeEmail = escapeHtml(email);
   const safeCompany = escapeHtml(company);
   const safeInquiryType = escapeHtml(inquiryType);
-  const safeMessage = escapeHtml(message);
+  // For message, preserve line breaks by replacing newlines before escaping
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
   const safeSubmittedAt = escapeHtml(submittedAt);
 
   try {
@@ -427,7 +436,7 @@ export async function sendContactNotification(contactData) {
             <div class="field">
               <div class="label">Inquiry Type</div>
               <div class="value">
-                <span class="badge badge-${safeInquiryType}">${safeInquiryType}</span>
+                <span class="badge ${badgeClass}">${safeInquiryType}</span>
               </div>
             </div>
 
@@ -450,7 +459,7 @@ export async function sendContactNotification(contactData) {
 
             <div class="field">
               <div class="label">Message</div>
-              <div class="message-box">${safeMessage.replace(/\n/g, '<br>')}</div>
+              <div class="message-box">${safeMessage}</div>
             </div>
 
             <div class="field">
