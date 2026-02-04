@@ -4,6 +4,21 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
+ * Escape HTML to prevent XSS attacks
+ * @param {string} str - String to escape
+ * @returns {string} - Escaped string
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
  * Send password reset email
  * @param {string} email - User's email address
  * @param {string} resetToken - Password reset token
@@ -317,12 +332,20 @@ export async function sendContactNotification(contactData) {
   const { name, email, company, inquiryType, message, submittedAt } = contactData;
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@awareguard.me';
 
+  // Sanitize user inputs to prevent XSS
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeCompany = escapeHtml(company);
+  const safeInquiryType = escapeHtml(inquiryType);
+  const safeMessage = escapeHtml(message);
+  const safeSubmittedAt = escapeHtml(submittedAt);
+
   try {
     const { data, error } = await resend.emails.send({
       from: 'AwareGuard Contact <notifications@awareguard.me>',
       to: adminEmail,
       replyTo: email,
-      subject: `New Contact Form Submission - ${inquiryType}`,
+      subject: `New Contact Form Submission - ${safeInquiryType}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -404,42 +427,42 @@ export async function sendContactNotification(contactData) {
             <div class="field">
               <div class="label">Inquiry Type</div>
               <div class="value">
-                <span class="badge badge-${inquiryType}">${inquiryType}</span>
+                <span class="badge badge-${safeInquiryType}">${safeInquiryType}</span>
               </div>
             </div>
 
             <div class="field">
               <div class="label">Name</div>
-              <div class="value">${name}</div>
+              <div class="value">${safeName}</div>
             </div>
 
             <div class="field">
               <div class="label">Email</div>
-              <div class="value"><a href="mailto:${email}">${email}</a></div>
+              <div class="value"><a href="mailto:${safeEmail}">${safeEmail}</a></div>
             </div>
 
-            ${company ? `
+            ${safeCompany ? `
             <div class="field">
               <div class="label">Company</div>
-              <div class="value">${company}</div>
+              <div class="value">${safeCompany}</div>
             </div>
             ` : ''}
 
             <div class="field">
               <div class="label">Message</div>
-              <div class="message-box">${message.replace(/\n/g, '<br>')}</div>
+              <div class="message-box">${safeMessage.replace(/\n/g, '<br>')}</div>
             </div>
 
             <div class="field">
               <div class="label">Submitted At</div>
-              <div class="value">${submittedAt}</div>
+              <div class="value">${safeSubmittedAt}</div>
             </div>
 
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
             
             <p style="font-size: 14px; color: #666;">
               <strong>Quick Actions:</strong><br>
-              Reply directly to this email to respond to ${name}.
+              Reply directly to this email to respond to ${safeName}.
             </p>
           </div>
         </body>
