@@ -45,6 +45,13 @@ router.post("/signup", async (req, res) => {
 
     const user = new User({ name, email });
     await user.setPassword(password);
+
+    // Explicitly remove paystackReference and googleId so they are
+    // truly absent (undefined) rather than null — this lets the
+    // MongoDB sparse unique index work correctly.
+    user.paystackReference = undefined;
+    user.googleId = undefined;
+
     await user.save();
 
     // Send welcome email (non-blocking)
@@ -55,6 +62,14 @@ router.post("/signup", async (req, res) => {
     const token = createToken(user);
     res.json({ token, user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium } });
   } catch (err) {
+    // Handle the specific duplicate key error on paystackReference
+    if (err.code === 11000 && err.keyPattern?.paystackReference) {
+      console.error('⚠️  paystackReference index conflict — the stale index needs to be rebuilt.');
+      console.error('   Run POST /api/auth/admin/fix-paystack-index to fix this permanently.');
+      return res.status(500).json({
+        error: "Signup temporarily unavailable. The database index needs a one-time fix. Please contact the admin."
+      });
+    }
     console.error(err);
     res.status(500).json({ error: "Signup failed" });
   }
