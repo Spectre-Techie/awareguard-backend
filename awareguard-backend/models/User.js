@@ -42,7 +42,6 @@ const userSchema = new mongoose.Schema(
     // Paystack transaction reference
     paystackReference: {
       type: String,
-      default: null,
       unique: true,
       sparse: true
     },
@@ -141,7 +140,6 @@ const userSchema = new mongoose.Schema(
     // Google OAuth ID
     googleId: {
       type: String,
-      default: null,
       sparse: true,
       unique: true
     },
