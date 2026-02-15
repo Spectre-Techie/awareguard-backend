@@ -356,8 +356,9 @@ router.get('/google/callback',
         isPremium: user.isPremium
       }))}`);
     } catch (err) {
-      console.error('❌ Google OAuth callback error:', err);
+      logger.error('Google OAuth callback error', { error: err.message, stack: err.stack });
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/signin?error=oauth_failed`);
     }
   }
 );
@@ -371,14 +372,14 @@ router.get('/google/callback',
  */
 router.post('/admin/fix-paystack-index', async (req, res) => {
   try {
-    console.log('🔧 Starting comprehensive index fix...');
+    logger.info('Starting comprehensive index fix');
 
     const db = mongoose.connection.db;
     const usersCollection = db.collection('users');
 
     // Get all existing indexes first
     const existingIndexes = await usersCollection.indexes();
-    console.log('📋 Current indexes:', existingIndexes.map(idx => idx.name));
+    logger.info('Current indexes', { indexes: existingIndexes.map(idx => idx.name) });
 
     // Drop ALL paystackReference-related indexes
     const paystackIndexNames = existingIndexes
@@ -389,10 +390,10 @@ router.post('/admin/fix-paystack-index', async (req, res) => {
     for (const indexName of paystackIndexNames) {
       try {
         await usersCollection.dropIndex(indexName);
-        console.log(`✅ Dropped index: ${indexName}`);
+        logger.info('Dropped index', { indexName });
         droppedIndexes.push(indexName);
       } catch (err) {
-        console.log(`⚠️  Could not drop ${indexName}:`, err.message);
+        logger.warn('Could not drop index', { indexName, error: err.message });
       }
     }
 
@@ -405,7 +406,7 @@ router.post('/admin/fix-paystack-index', async (req, res) => {
         name: 'paystackReference_sparse_1'
       }
     );
-    console.log('✅ Created new sparse unique index');
+    logger.info('Created new sparse unique index');
 
     // Verify the fix
     const newIndexes = await usersCollection.indexes();
@@ -424,10 +425,10 @@ router.post('/admin/fix-paystack-index', async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('❌ Error fixing index:', error);
+    logger.error('Error fixing index', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Failed to fix index'
     });
   }
 });
