@@ -1,8 +1,14 @@
+// awareguard-backend/routes/report.js
 import express from 'express';
-import nodemailer from 'nodemailer';
+import { Report } from '../models/Report.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
+/**
+ * POST /api/report/report
+ * Submit a scam report
+ */
 router.post('/report', async (req, res) => {
   const { name, email, details } = req.body;
 
@@ -11,32 +17,24 @@ router.post('/report', async (req, res) => {
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: 'sadiqibraheem43@gmail.com',
-        pass: 'rcpi ieyw hrxj msfv' // Use an App Password, not your actual Gmail password
-      },
+    const report = await Report.create({
+      name,
+      email,
+      details,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
     });
 
-    const mailOptions = {
-      from: `"AwareGuard Reporter" <${email}>`,
-      to: 'sadiqibraheem43@gmail.com',
-      subject: '🚨 New Scam Report Submission',
-      text: `
-        Name: ${name}
-        Email: ${email}
-        Scam Details:
-        ${details}
-      `,
-    };
+    logger.info('New scam report submitted', { reportId: report._id, email });
 
-    await transporter.sendMail(mailOptions);
-
-    res.status(200).json({ message: 'Report sent successfully.' });
+    res.status(200).json({
+      success: true,
+      message: 'Report submitted successfully. Our team will review it shortly.',
+      reportId: report._id
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to send report. Please try again later.' });
+    logger.error('Report submission failed', { error: err.message, stack: err.stack });
+    res.status(500).json({ error: 'Failed to submit report. Please try again later.' });
   }
 });
 
