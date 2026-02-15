@@ -6,6 +6,7 @@ const storySchema = new mongoose.Schema(
     title: { type: String, required: true },
     category: { type: String, default: "General" },
     content: { type: String, required: true },
+    isApproved: { type: Boolean, default: false },
     likesCount: { type: Number, default: 0 },
     comments: [
       {
