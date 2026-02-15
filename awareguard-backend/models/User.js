@@ -148,7 +148,16 @@ const userSchema = new mongoose.Schema(
     emailVerified: {
       type: Boolean,
       default: false
-    }
+    },
+
+    // ===== REFRESH TOKENS =====
+
+    // Array of hashed refresh tokens for rotation
+    refreshTokens: [{
+      tokenHash: String,
+      expiresAt: Date,
+      createdAt: { type: Date, default: Date.now }
+    }]
   },
   { timestamps: true }
 );
