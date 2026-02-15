@@ -12,29 +12,31 @@
 import express from 'express';
 import crypto from 'crypto';
 import { User } from '../models/User.js';
+import { PaymentTransaction } from '../models/PaymentTransaction.js';
 import { authMiddleware } from '../middleware/auth.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
 /**
  * GET /api/verify-payment/:reference
  * Verify Paystack payment and activate premium subscription
- * 
- * Params:
- *   - reference (string): Paystack transaction reference
- * 
- * Headers:
- *   - Authorization: Bearer {token}
- * 
- * Returns:
- *   - success (boolean): Whether verification was successful
- *   - message (string): Response message
- *   - user (object): Updated user data
  */
 router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
   try {
     const { reference } = req.params;
-    const userId = req.user._id; // From auth middleware
+    const userId = req.user.id; // From auth middleware
+
+    // ===== IDEMPOTENCY CHECK =====
+    const existing = await PaymentTransaction.findOne({ reference });
+    if (existing) {
+      logger.info('Payment already processed (idempotent)', { reference, userId });
+      return res.json({
+        success: true,
+        message: 'Payment already processed',
+        idempotent: true
+      });
+    }
 
     // Verify with Paystack API
     const paystackResponse = await fetch(
@@ -74,6 +76,7 @@ router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
     const expectedAmount = expectedAmounts[plan];
 
     if (transaction.amount !== expectedAmount) {
+      logger.warn('Payment amount mismatch', { expected: expectedAmount, actual: transaction.amount, reference });
       return res.status(400).json({
         success: false,
         message: 'Payment amount mismatch'
@@ -81,7 +84,8 @@ router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
     }
 
     // Verify user matches
-    if (transaction.metadata?.userId !== userId) {
+    if (transaction.metadata?.userId && transaction.metadata.userId !== userId) {
+      logger.warn('Payment user mismatch', { tokenUser: userId, paymentUser: transaction.metadata.userId, reference });
       return res.status(400).json({
         success: false,
         message: 'User mismatch - payment does not match your account'
@@ -110,6 +114,19 @@ router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
       { new: true, select: 'id email isPremium subscriptionPlan subscriptionExpiresAt' }
     );
 
+    // Record the transaction
+    await PaymentTransaction.create({
+      reference,
+      userId,
+      amount: transaction.amount,
+      plan,
+      status: 'success',
+      source: 'verify',
+      paystackData: transaction
+    });
+
+    logger.info('Payment verified and premium activated', { userId, reference, plan });
+
     res.json({
       success: true,
       message: 'Premium subscription activated successfully!',
@@ -123,10 +140,10 @@ router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Payment verification error:', error);
+    logger.error('Payment verification error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      error: error.message
+      message: 'Internal server error during verification'
     });
   }
 });
@@ -134,93 +151,91 @@ router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
 /**
  * POST /api/paystack-webhook
  * Receive and process webhook events from Paystack
- * 
- * Body: Paystack webhook event (JSON)
- * 
- * Events processed:
- *   - charge.success: Update user premium status
- *   - charge.failed: Log payment failure
  */
-router.post('/paystack-webhook', express.json(), async (req, res) => {
+router.post('/paystack-webhook', async (req, res) => {
   try {
     const signature = req.headers['x-paystack-signature'];
-    const body = JSON.stringify(req.body);
+    if (!signature) {
+      return res.status(400).json({ error: 'Missing signature' });
+    }
 
-    // Verify webhook signature
+    // Use raw body (Buffer) for accurate HMAC comparison
+    const rawBody = req.body;
     const hash = crypto
       .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
-      .update(body)
+      .update(rawBody)
       .digest('hex');
 
-    if (hash !== signature) {
-      console.error('Invalid webhook signature');
+    if (!crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature))) {
+      logger.warn('Invalid Paystack webhook signature');
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
-    const event = req.body;
+    const event = JSON.parse(rawBody.toString());
 
-    // Handle charge.success event
+    // Check for idempotency (only for charge.success)
     if (event.event === 'charge.success') {
-      const transaction = event.data;
-      const userId = transaction.metadata?.userId;
-      const plan = transaction.metadata?.plan || 'monthly';
-
-      if (!userId) {
-        console.error('No userId in webhook metadata');
-        return res.status(400).json({ error: 'Missing userId' });
+      const existing = await PaymentTransaction.findOne({ reference: event.data.reference });
+      if (existing) {
+        return res.status(200).send('Event already processed');
       }
 
-      // Calculate expiry date
-      let expiryDate = new Date();
-      if (plan === 'monthly') {
-        expiryDate.setMonth(expiryDate.getMonth() + 1);
-      } else {
-        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-      }
+      const { reference, metadata, amount } = event.data;
+      const userId = metadata?.userId;
+      const plan = metadata?.plan || 'monthly';
 
-      // Update user
-      await User.findByIdAndUpdate(userId, {
-        isPremium: true,
-        subscriptionPlan: plan,
-        subscriptionExpiresAt: expiryDate,
-        subscriptionStartedAt: new Date(),
-        paystackReference: transaction.reference,
-        lastPaymentAmount: transaction.amount / 100
+      // Store transaction first to prevent duplicate processing
+      await PaymentTransaction.create({
+        reference,
+        userId: userId || null,
+        amount,
+        plan,
+        status: 'success',
+        source: 'webhook',
+        paystackData: event.data
       });
 
-      console.log(`✅ Webhook: Payment successful for user ${userId} - Reference: ${transaction.reference}`);
+      if (userId) {
+        // Calculate expiry
+        let subscriptionExpiresAt = new Date();
+        if (plan === 'monthly') {
+          subscriptionExpiresAt.setMonth(subscriptionExpiresAt.getMonth() + 1);
+        } else if (plan === 'annual') {
+          subscriptionExpiresAt.setFullYear(subscriptionExpiresAt.getFullYear() + 1);
+        }
+
+        // Update user
+        await User.findByIdAndUpdate(userId, {
+          isPremium: true,
+          subscriptionPlan: plan,
+          subscriptionExpiresAt,
+          subscriptionStartedAt: new Date(),
+          paystackReference: reference,
+          lastPaymentAmount: amount / 100
+        });
+
+        logger.info('Webhook: Premium activated', { userId, reference });
+      } else {
+        logger.warn('Webhook: Missing userId in metadata', { reference });
+      }
+    } else if (event.event === 'charge.failed') {
+      logger.info(`Webhook: Payment failed`, { reference: event.data.reference });
     }
 
-    // Handle charge.failed event
-    if (event.event === 'charge.failed') {
-      console.log(`❌ Webhook: Payment failed - Reference: ${event.data.reference}`);
-    }
-
-    // Always return success to acknowledge receipt
-    res.json({ status: 'success', message: 'Webhook processed' });
-
+    res.sendStatus(200);
   } catch (error) {
-    console.error('Webhook processing error:', error);
-    res.status(500).json({ error: error.message });
+    logger.error('Webhook error', { error: error.message, stack: error.stack });
+    res.sendStatus(500);
   }
 });
 
 /**
  * GET /api/subscription-status
  * Get current user's subscription status
- * 
- * Headers:
- *   - Authorization: Bearer {token}
- * 
- * Returns:
- *   - isPremium (boolean): Current premium status
- *   - subscriptionPlan (string): 'monthly' or 'annual'
- *   - subscriptionExpiresAt (date): When subscription expires
- *   - daysRemaining (number): Days until expiration
  */
 router.get('/subscription-status', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const user = await User.findById(userId).select(
       'isPremium subscriptionPlan subscriptionExpiresAt'
     );
@@ -254,25 +269,18 @@ router.get('/subscription-status', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Subscription status error:', error);
-    res.status(500).json({ error: error.message });
+    logger.error('Subscription status error', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: 'Failed to fetch subscription status' });
   }
 });
 
 /**
  * POST /api/cancel-subscription
  * Cancel user's premium subscription
- * 
- * Headers:
- *   - Authorization: Bearer {token}
- * 
- * Returns:
- *   - success (boolean): Whether cancellation was successful
- *   - message (string): Confirmation message
  */
 router.post('/cancel-subscription', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     const user = await User.findByIdAndUpdate(
       userId,
@@ -283,6 +291,8 @@ router.post('/cancel-subscription', authMiddleware, async (req, res) => {
       },
       { new: true, select: 'id email isPremium' }
     );
+
+    logger.info('Subscription cancelled', { userId });
 
     res.json({
       success: true,
@@ -295,10 +305,10 @@ router.post('/cancel-subscription', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Subscription cancellation error:', error);
+    logger.error('Subscription cancellation error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Failed to cancel subscription'
     });
   }
 });
