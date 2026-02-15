@@ -1,6 +1,7 @@
 // awareguard-backend/middleware/auth.js
 import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
+import logger from "../utils/logger.js";
 
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -13,7 +14,7 @@ export const authMiddleware = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    console.error("Auth error:", err.message);
+    logger.error("Auth middleware error", { error: err.message });
     return res.status(401).json({ error: "Unauthorized" });
   }
 };
