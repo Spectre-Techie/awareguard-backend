@@ -2,6 +2,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { User } from '../models/User.js';
+import logger from '../utils/logger.js';
 
 /**
  * Configure Google OAuth Strategy
@@ -16,7 +17,7 @@ passport.use(
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
-                console.log('📧 Google OAuth profile:', profile.emails[0].value);
+                logger.info('Google OAuth profile received', { email: profile.emails[0]?.value });
 
                 // Extract user info from Google profile
                 const email = profile.emails[0].value;
@@ -31,10 +32,14 @@ passport.use(
                     if (!user.googleId) {
                         user.googleId = googleId;
                         user.emailVerified = true;
+                        // Avoid null constraint issue with paystackReference
+                        if (user.paystackReference === null) {
+                            user.paystackReference = undefined;
+                        }
                         await user.save();
-                        console.log('✅ Linked Google account to existing user:', email);
+                        logger.info('Linked Google account to existing user', { email });
                     } else {
-                        console.log('✅ User logged in with Google:', email);
+                        logger.info('User logged in with Google', { email });
                     }
                 } else {
                     // Create new user with Google OAuth
@@ -43,15 +48,16 @@ passport.use(
                         email,
                         googleId,
                         emailVerified: true,
-                        // No password needed for OAuth users
+                        // Explicitly set paystackReference to undefined to avoid sparse index collision
+                        paystackReference: undefined
                     });
                     await user.save();
-                    console.log('✅ Created new user via Google OAuth:', email);
+                    logger.info('Created new user via Google OAuth', { email });
                 }
 
                 return done(null, user);
             } catch (error) {
-                console.error('❌ Google OAuth error:', error);
+                logger.error('Google OAuth error', { error: error.message, stack: error.stack });
                 return done(error, null);
             }
         }
