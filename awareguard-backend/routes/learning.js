@@ -2,6 +2,7 @@
 import express from "express";
 import { authMiddleware } from "../middleware/auth.js";
 import { User } from "../models/User.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -16,9 +17,9 @@ const MODULES = {
   "online-shopping-security": { xp: 10, premium: false, title: "Online Shopping & Payment Security" },
   "device-security": { xp: 14, premium: false, title: "Device & Network Security" },
   "privacy-basics": { xp: 12, premium: false, title: "Digital Privacy Fundamentals" },
-  "email-security": { xp: 18, premium: false, title: "Advanced Email Security" },
 
   // ===== INTERMEDIATE PATH (PREMIUM) =====
+  "email-security": { xp: 18, premium: true, title: "Advanced Email Security" },
   "social-engineering": { xp: 25, premium: true, title: "Social Engineering Tactics" },
   "identity-theft": { xp: 20, premium: true, title: "Identity Theft Prevention" },
   "advanced-phishing": { xp: 25, premium: true, title: "Advanced Phishing Detection" },
@@ -61,7 +62,7 @@ router.get("/progress", authMiddleware, async (req, res) => {
       quizHistory: user.quizHistory || []
     });
   } catch (err) {
-    console.error("Error fetching progress:", err);
+    logger.error("Error fetching progress", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Failed to fetch progress" });
   }
 });
@@ -145,7 +146,7 @@ router.post("/complete", authMiddleware, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error completing module:", err);
+    logger.error("Error completing module", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Failed to complete module" });
   }
 });
@@ -211,7 +212,7 @@ router.post("/quiz-submit", authMiddleware, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error submitting quiz:", err);
+    logger.error("Error submitting quiz", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Failed to submit quiz" });
   }
 });
@@ -273,7 +274,7 @@ router.get("/stats", authMiddleware, async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Error fetching stats:", err);
+    logger.error("Error fetching stats", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
@@ -324,7 +325,7 @@ router.get("/leaderboard", async (req, res) => {
       totalUsers: leaderboard.length
     });
   } catch (err) {
-    console.error("Error fetching leaderboard:", err);
+    logger.error("Error fetching leaderboard", { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
 });
