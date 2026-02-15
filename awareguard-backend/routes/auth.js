@@ -1,18 +1,48 @@
 // awareguard-backend/routes/auth.js
 import express from "express";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordResetConfirmation } from "../utils/emailService.js";
-import { createPasswordResetToken, hashToken } from "../utils/tokenUtils.js";
+import { createPasswordResetToken, hashToken, generateResetToken } from "../utils/tokenUtils.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
 
-// Create JWT
+// ===== REDIRECT VALIDATION =====
+const ALLOWED_REDIRECT_ORIGINS = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
+function validateRedirectUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_REDIRECT_ORIGINS.includes(parsed.origin);
+  } catch {
+    return false;
+  }
+}
+
+// ===== JWT HELPERS =====
+
+// Create access token (7 days)
 function createToken(user) {
   return jwt.sign({ sub: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, {
     expiresIn: "7d",
   });
+}
+
+// Create refresh token (30 days)
+function createRefreshToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Hash refresh token for storage
+function hashRefreshToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // Simple in-memory rate limiting (use Redis in production)
@@ -25,7 +55,7 @@ function checkRateLimit(email) {
   // Remove attempts older than 1 hour
   const recentAttempts = attempts.filter(time => now - time < 60 * 60 * 1000);
 
-  if (recentAttempts.length >= 5) {
+  if (recentAttempts.length >= 3) {
     return false; // Too many attempts
   }
 
@@ -56,21 +86,33 @@ router.post("/signup", async (req, res) => {
 
     // Send welcome email (non-blocking)
     sendWelcomeEmail(email, name).catch(err =>
-      console.error('Failed to send welcome email:', err)
+      logger.error('Failed to send welcome email', { error: err.message })
     );
 
+    // Create access token and refresh token
     const token = createToken(user);
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium } });
+    const refreshToken = createRefreshToken();
+
+    // Store hashed refresh token
+    user.refreshTokens.push({
+      tokenHash: hashRefreshToken(refreshToken),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+    });
+    await user.save();
+    res.json({
+      token,
+      refreshToken,
+      user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium }
+    });
   } catch (err) {
     // Handle the specific duplicate key error on paystackReference
     if (err.code === 11000 && err.keyPattern?.paystackReference) {
-      console.error('⚠️  paystackReference index conflict — the stale index needs to be rebuilt.');
-      console.error('   Run POST /api/auth/admin/fix-paystack-index to fix this permanently.');
+      logger.error('paystackReference index conflict', { error: err.message });
       return res.status(500).json({
-        error: "Signup temporarily unavailable. The database index needs a one-time fix. Please contact the admin."
+        error: "Signup temporarily unavailable. Please contact support."
       });
     }
-    console.error(err);
+    logger.error('Signup failed', { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Signup failed" });
   }
 });
@@ -85,10 +127,68 @@ router.post("/signin", async (req, res) => {
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
     const token = createToken(user);
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium } });
+    const refreshToken = createRefreshToken();
+
+    // Store hashed refresh token
+    user.refreshTokens.push({
+      tokenHash: hashRefreshToken(refreshToken),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    });
+    await user.save();
+
+    res.json({
+      token,
+      refreshToken,
+      user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium }
+    });
   } catch (err) {
-    console.error(err);
+    logger.error('Signin failed', { error: err.message, stack: err.stack });
     res.status(500).json({ error: "Signin failed" });
+  }
+});
+
+// POST /api/auth/refresh
+// Refresh access token using refresh token (with rotation)
+router.post("/refresh", async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    const hashedToken = hashRefreshToken(refreshToken);
+    const user = await User.findOne({ 'refreshTokens.tokenHash': hashedToken });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // Find and validate the token entry
+    const tokenEntry = user.refreshTokens.find(t => t.tokenHash === hashedToken);
+    if (!tokenEntry || tokenEntry.expiresAt < new Date()) {
+      // Token expired or not found — revoke ALL tokens (potential theft)
+      user.refreshTokens = [];
+      await user.save();
+      logger.warn('Expired/invalid refresh token detected', { userId: user._id });
+      return res.status(401).json({ error: 'Refresh token expired' });
+    }
+
+    // Rotate: remove old, create new
+    user.refreshTokens = user.refreshTokens.filter(t => t.tokenHash !== hashedToken);
+    const newRefreshToken = createRefreshToken();
+    user.refreshTokens.push({
+      tokenHash: hashRefreshToken(newRefreshToken),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    });
+    await user.save();
+
+    const accessToken = createToken(user);
+    logger.info('Refresh token rotated', { userId: user._id });
+
+    res.json({ token: accessToken, refreshToken: newRefreshToken });
+  } catch (err) {
+    logger.error('Refresh token error', { error: err.message, stack: err.stack });
+    res.status(500).json({ error: 'Failed to refresh token' });
   }
 });
 
