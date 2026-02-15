@@ -2,6 +2,8 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { sendContactNotification } from '../utils/emailService.js';
+import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -17,8 +19,6 @@ const contactLimiter = rateLimit({
 });
 
 // Contact Schema (simple model for storing inquiries)
-import mongoose from 'mongoose';
-
 const contactSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -105,7 +105,7 @@ router.post('/', contactLimiter, async (req, res) => {
                 submittedAt: new Date().toLocaleString()
             });
         } catch (emailError) {
-            console.error('❌ Failed to send email notification:', emailError);
+            logger.error('Failed to send email notification', { error: emailError.message });
             // Don't fail the request if email fails
         }
 
@@ -116,7 +116,7 @@ router.post('/', contactLimiter, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Contact form error:', error);
+        logger.error('Contact form error', { error: error.message, stack: error.stack });
         res.status(500).json({
             error: 'Failed to submit contact form. Please try again.'
         });
@@ -139,7 +139,7 @@ router.get('/', async (req, res) => {
             contacts
         });
     } catch (error) {
-        console.error('❌ Error fetching contacts:', error);
+        logger.error('Error fetching contacts', { error: error.message, stack: error.stack });
         res.status(500).json({
             error: 'Failed to fetch contacts'
         });
