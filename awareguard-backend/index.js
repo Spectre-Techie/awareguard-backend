@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { config } from "dotenv";
 import askRoute from "./routes/sendMessages.js";
 import reportRoute from "./routes/report.js";
@@ -38,6 +39,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// ===== COOKIE PARSER =====
+app.use(cookieParser());
 
 // ===== RAW BODY FOR WEBHOOK SIGNATURE VERIFICATION =====
 // MUST come before express.json() to preserve raw bytes
