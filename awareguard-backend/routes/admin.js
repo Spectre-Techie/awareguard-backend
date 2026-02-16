@@ -9,9 +9,9 @@ import logger from '../utils/logger.js';
 
 const router = express.Router();
 
-// Admin-only middleware
+// Admin-only middleware — checks against ADMIN_EMAIL env var
 const adminOnly = (req, res, next) => {
-    if (req.user.role !== 'admin') {
+    if (req.user.email !== process.env.ADMIN_EMAIL) {
         logger.warn('Unauthorized admin access attempt', { userId: req.user._id, email: req.user.email });
         return res.status(403).json({ error: 'Admin access required' });
     }
@@ -191,10 +191,9 @@ router.get('/users/:id', async (req, res) => {
  */
 router.patch('/users/:id', async (req, res) => {
     try {
-        const { role, isPremium, subscriptionPlan, subscriptionExpiresAt } = req.body;
+        const { isPremium, subscriptionPlan, subscriptionExpiresAt } = req.body;
 
         const updates = {};
-        if (role !== undefined) updates.role = role;
         if (isPremium !== undefined) updates.isPremium = isPremium;
         if (subscriptionPlan !== undefined) updates.subscriptionPlan = subscriptionPlan;
         if (subscriptionExpiresAt !== undefined) updates.subscriptionExpiresAt = subscriptionExpiresAt;
