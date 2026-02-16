@@ -28,9 +28,15 @@ function validateRedirectUrl(url) {
 
 // ===== JWT HELPERS =====
 
+// Determine role based on env-based admin credentials
+function getUserRole(user) {
+  return user.email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
+}
+
 // Create access token (7 days)
 function createToken(user) {
-  return jwt.sign({ sub: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET, {
+  const role = getUserRole(user);
+  return jwt.sign({ sub: user._id, email: user.email, role }, process.env.JWT_SECRET, {
     expiresIn: "7d",
   });
 }
@@ -43,6 +49,28 @@ function createRefreshToken() {
 // Hash refresh token for storage
 function hashRefreshToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// ===== REFRESH TOKEN COOKIE HELPER =====
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',    // required for cross-origin (Netlify → Render)
+  path: '/api/auth',   // only sent to auth endpoints
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+};
+
+function setRefreshCookie(res, refreshToken) {
+  res.cookie('AG_REFRESH', refreshToken, REFRESH_COOKIE_OPTIONS);
+}
+
+function clearRefreshCookie(res) {
+  res.clearCookie('AG_REFRESH', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    path: '/api/auth',
+  });
 }
 
 // Simple in-memory rate limiting (use Redis in production)
@@ -99,10 +127,13 @@ router.post("/signup", async (req, res) => {
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
     });
     await user.save();
+
+    // Set refresh token as httpOnly cookie
+    setRefreshCookie(res, refreshToken);
+
     res.json({
       token,
-      refreshToken,
-      user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium }
+      user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium, role: 'user' }
     });
   } catch (err) {
     // Handle the specific duplicate key error on paystackReference
@@ -136,10 +167,13 @@ router.post("/signin", async (req, res) => {
     });
     await user.save();
 
+    // Set refresh token as httpOnly cookie
+    setRefreshCookie(res, refreshToken);
+
+    const role = getUserRole(user);
     res.json({
       token,
-      refreshToken,
-      user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium }
+      user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium, role }
     });
   } catch (err) {
     logger.error('Signin failed', { error: err.message, stack: err.stack });
@@ -148,18 +182,19 @@ router.post("/signin", async (req, res) => {
 });
 
 // POST /api/auth/refresh
-// Refresh access token using refresh token (with rotation)
+// Refresh access token using httpOnly cookie refresh token (with rotation)
 router.post("/refresh", async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies?.AG_REFRESH;
     if (!refreshToken) {
-      return res.status(400).json({ error: 'Refresh token required' });
+      return res.status(401).json({ error: 'Refresh token required' });
     }
 
     const hashedToken = hashRefreshToken(refreshToken);
     const user = await User.findOne({ 'refreshTokens.tokenHash': hashedToken });
 
     if (!user) {
+      clearRefreshCookie(res);
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
 
@@ -169,6 +204,7 @@ router.post("/refresh", async (req, res) => {
       // Token expired or not found — revoke ALL tokens (potential theft)
       user.refreshTokens = [];
       await user.save();
+      clearRefreshCookie(res);
       logger.warn('Expired/invalid refresh token detected', { userId: user._id });
       return res.status(401).json({ error: 'Refresh token expired' });
     }
@@ -185,10 +221,37 @@ router.post("/refresh", async (req, res) => {
     const accessToken = createToken(user);
     logger.info('Refresh token rotated', { userId: user._id });
 
-    res.json({ token: accessToken, refreshToken: newRefreshToken });
+    // Set new refresh token cookie
+    setRefreshCookie(res, newRefreshToken);
+
+    const role = getUserRole(user);
+    res.json({ token: accessToken, user: { id: user._id, name: user.name, email: user.email, isPremium: user.isPremium, role } });
   } catch (err) {
     logger.error('Refresh token error', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to refresh token' });
+  }
+});
+
+// POST /api/auth/logout
+// Server-side logout: revoke refresh token and clear cookie
+router.post("/logout", async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.AG_REFRESH;
+    if (refreshToken) {
+      const hashedToken = hashRefreshToken(refreshToken);
+      const user = await User.findOne({ 'refreshTokens.tokenHash': hashedToken });
+      if (user) {
+        user.refreshTokens = user.refreshTokens.filter(t => t.tokenHash !== hashedToken);
+        await user.save();
+        logger.info('Refresh token revoked on logout', { userId: user._id });
+      }
+    }
+    clearRefreshCookie(res);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Logout error', { error: err.message, stack: err.stack });
+    clearRefreshCookie(res);
+    res.json({ success: true });
   }
 });
 
@@ -339,7 +402,7 @@ router.get('/google', passportConfig.authenticate('google', {
  */
 router.get('/google/callback',
   passportConfig.authenticate('google', { session: false, failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/signin?error=oauth_failed` }),
-  (req, res) => {
+  async (req, res) => {
     try {
       // User authenticated successfully via Google
       const user = req.user;
@@ -347,13 +410,26 @@ router.get('/google/callback',
       // Generate JWT token
       const token = createToken(user);
 
-      // Redirect to frontend with token
+      // Generate refresh token for OAuth users too
+      const refreshToken = createRefreshToken();
+      user.refreshTokens.push({
+        tokenHash: hashRefreshToken(refreshToken),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      });
+      await user.save();
+
+      // Set refresh token as httpOnly cookie
+      setRefreshCookie(res, refreshToken);
+
+      // Redirect to frontend with token + user (including role)
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const role = getUserRole(user);
       res.redirect(`${frontendUrl}/auth/google/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
         id: user._id,
         name: user.name,
         email: user.email,
-        isPremium: user.isPremium
+        isPremium: user.isPremium,
+        role
       }))}`);
     } catch (err) {
       logger.error('Google OAuth callback error', { error: err.message, stack: err.stack });
