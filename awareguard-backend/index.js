@@ -56,7 +56,8 @@ app.use(express.json());
 connectDB();
 
 // 🔹 EXISTING ROUTES (unchanged)
-app.use("/api/report", reportRoute);
+app.use("/api/reports", reportRoute);
+app.use("/api/report", reportRoute); // Legacy compatibility alias
 app.use("/api/ask", askRoute);
 
 //New Routes
