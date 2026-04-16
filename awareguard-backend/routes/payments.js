@@ -68,8 +68,8 @@ router.get('/verify-payment/:reference', authMiddleware, async (req, res) => {
 
     // Verify amount (check if it matches expected)
     const expectedAmounts = {
-      monthly: 999900, // ₦9,999 in kobo
-      annual: 9999900  // ₦99,999 in kobo
+      monthly: 500000, // ₦5,000 in kobo
+      annual: 5000000  // ₦50,000 in kobo
     };
 
     const plan = transaction.metadata?.plan || 'monthly';
