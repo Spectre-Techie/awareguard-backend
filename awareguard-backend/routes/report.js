@@ -5,15 +5,41 @@ import logger from '../utils/logger.js';
 
 const router = express.Router();
 
-/**
- * POST /api/report/report
- * Submit a scam report
- */
-router.post('/report', async (req, res) => {
-  const { name, email, details } = req.body;
+function sanitizeText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
 
-  if (!name || !email || !details) {
-    return res.status(400).json({ error: 'All fields are required.' });
+function normalizeReportPayload(body = {}) {
+  const name = sanitizeText(body.name) || 'Anonymous Reporter';
+  const email = sanitizeText(body.email).toLowerCase() || 'anonymous@awareguard.local';
+
+  const legacyDetails = sanitizeText(body.details);
+  const type = sanitizeText(body.type);
+  const url = sanitizeText(body.url);
+  const description = sanitizeText(body.description);
+  const evidence = sanitizeText(body.evidence);
+
+  let details = legacyDetails;
+
+  if (!details && description) {
+    const lines = [];
+
+    if (type) lines.push(`Threat Type: ${type}`);
+    if (url) lines.push(`URL: ${url}`);
+    lines.push(`Description: ${description}`);
+    if (evidence) lines.push(`Evidence: ${evidence}`);
+
+    details = lines.join('\n');
+  }
+
+  return { name, email, details };
+}
+
+async function submitReport(req, res) {
+  const { name, email, details } = normalizeReportPayload(req.body);
+
+  if (!details) {
+    return res.status(400).json({ error: 'Report details are required.' });
   }
 
   try {
@@ -36,6 +62,13 @@ router.post('/report', async (req, res) => {
     logger.error('Report submission failed', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to submit report. Please try again later.' });
   }
-});
+}
+
+/**
+ * POST /api/reports
+ * Submit a scam report
+ */
+router.post('/', submitReport);
+router.post('/report', submitReport); // Legacy compatibility alias
 
 export default router;
