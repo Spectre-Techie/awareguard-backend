@@ -92,11 +92,35 @@ function checkRateLimit(email) {
   return true;
 }
 
+const PASSWORD_REQUIREMENTS_ERROR =
+  "Password must be at least 8 characters and include an uppercase letter, a number, and a symbol";
+
+function evaluatePasswordRules(password = "") {
+  return {
+    minLength: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    number: /[0-9]/.test(password),
+    symbol: /[^A-Za-z0-9\s]/.test(password),
+  };
+}
+
+function isPasswordPolicyValid(password = "") {
+  const rules = evaluatePasswordRules(password);
+  return Object.values(rules).every(Boolean);
+}
+
 // POST /api/auth/signup
 router.post("/signup", async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+
+    if (!isPasswordPolicyValid(password)) {
+      return res.status(400).json({
+        error: PASSWORD_REQUIREMENTS_ERROR,
+        requirements: evaluatePasswordRules(password),
+      });
+    }
 
     const existing = await User.findOne({ email });
     if (existing) return res.status(409).json({ error: "Email already registered" });
@@ -335,8 +359,11 @@ router.post("/reset-password/:token", async (req, res) => {
       return res.status(400).json({ error: "New password is required" });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    if (!isPasswordPolicyValid(password)) {
+      return res.status(400).json({
+        error: PASSWORD_REQUIREMENTS_ERROR,
+        requirements: evaluatePasswordRules(password),
+      });
     }
 
     // Hash the token to compare with database
