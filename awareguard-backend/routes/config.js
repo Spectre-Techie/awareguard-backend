@@ -12,7 +12,7 @@ router.get('/paystack', (req, res) => {
     res.json({
         publicKey: process.env.PAYSTACK_PUBLIC_KEY,
         monthlyAmount: 5000,
-        annualAmount: 60000
+        annualAmount: 50000
     });
 });
 
