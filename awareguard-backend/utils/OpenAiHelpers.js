@@ -4,22 +4,14 @@ import 'dotenv/config';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-export async function chatHelper(message, model = 'openai/gpt-oss-120b:free') {
+// FIXED: Using 'openrouter/free' to let OpenRouter automatically manage backend model availability
+export async function chatHelper(message, model = 'openrouter/free') {
   const url = 'https://openrouter.ai';
-  
-  // Create an array of free backup models to guarantee uptime when rate limits hit
-  const modelFallbackList = [
-    model,                          // 1st choice: your requested model (e.g. gpt-oss-120b:free)
-    'google/gemma-4-31b-it:free',   // 2nd choice backup
-    'openrouter/free'               // 3rd choice backup (Auto-routes to any healthy free model)
-  ];
-
   try {
     const res = await axios.post(
       url,
       {
-        // Passing the array tells OpenRouter to auto-failover seamlessly
-        models: modelFallbackList, 
+        model, // Restored back to the correct, single string configuration
         messages: [
           { role: 'system', content: 'You are AwareGuard AI, a professional and user-friendly scam awareness assistant dedicated solely to educating users on scams and digital safety; provide detailed, accurate answers related to scam prevention, and if asked any question beyond your scope, politely respond that you are designed only for scam awareness and cannot assist with that topic, while also temporarily storing previous responses during a session to maintain conversational context and provide relevant, coherent answers to follow-up questions.' },
           message
@@ -36,7 +28,7 @@ export async function chatHelper(message, model = 'openai/gpt-oss-120b:free') {
       }
     );
 
-    // Kept exactly intact: Your pristine, original array payload destructuring logic
+    // Your original, unmodified safe object destructuring path
     const content = res.data.choices?.[0]?.message?.content;
     return { content: content || 'No reply from AI.' };
   } catch (e) {
@@ -44,4 +36,5 @@ export async function chatHelper(message, model = 'openai/gpt-oss-120b:free') {
     throw new Error('AI failed to respond via OpenRouter.');
   }
 }
+
 
