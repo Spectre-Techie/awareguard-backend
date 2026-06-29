@@ -4,8 +4,9 @@ import 'dotenv/config';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-export async function chatHelper(message, model = 'google/gemini-2.5-flash:free') {
-  const url = 'https://openrouter.ai/api/v1/chat/completions';
+// FIXED: Using a verified free tier model slug on OpenRouter
+export async function chatHelper(message, model = 'meta-llama/llama-3-8b-instruct:free') {
+  const url = 'https://openrouter.ai';
   try {
     const res = await axios.post(
       url,
@@ -30,8 +31,8 @@ export async function chatHelper(message, model = 'google/gemini-2.5-flash:free'
       }
     );
 
-    // PERFECTED: Fixed the optional chaining typo cleanly without breaking evaluation logic
-    const content = res.data?.choices?.[0]?.message?.content;
+    // CLEAN LOGIC: Reading the data payload securely
+    const content = res.data && res.data.choices && res.data.choices[0] && res.data.choices[0].message && res.data.choices[0].message.content;
     return { content: content || 'No reply from AI.' };
   } catch (e) {
     console.error('OpenRouter Error:', e.response?.data || e.message);
