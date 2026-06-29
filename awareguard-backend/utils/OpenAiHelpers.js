@@ -4,10 +4,6 @@ import 'dotenv/config';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-/**
- * Robust helper function to execute OpenRouter Chat Completions flawlessly.
- * Defaults to the production unified free-models router.
- */
 export async function chatHelper(message, model = 'openrouter/free') {
   const url = 'https://openrouter.ai';
   
@@ -35,15 +31,17 @@ export async function chatHelper(message, model = 'openrouter/free') {
       }
     );
 
-    // FIXED: Correctly parse choices array to capture string contents accurately
-    const content = res.data?.choices?.[0]?.message?.content;
+    // FIXED: Correctly parsing array index 0 using standard safe checking blocks
+    let content = 'No reply from AI.';
+    if (res.data && res.data.choices && res.data.choices[0] && res.data.choices[0].message) {
+      content = res.data.choices[0].message.content;
+    }
     
     return { content: content || 'No reply from AI.' };
   } catch (e) {
-    // Print explicit debugging parameters if Axios fails internally
+    // This logs the exact payload if OpenRouter rejects the key or configuration
     console.error('OpenRouter Network Exception Details:', e.response?.data || e.message);
     throw new Error('AI failed to respond via OpenRouter.');
   }
 }
-
 
