@@ -4,7 +4,6 @@ import 'dotenv/config';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-// CHANGED: Set default model to a completely free OpenRouter model
 export async function chatHelper(message, model = 'google/gemini-2.5-flash:free') {
   const url = 'https://openrouter.ai';
   try {
@@ -20,7 +19,7 @@ export async function chatHelper(message, model = 'google/gemini-2.5-flash:free'
           message
         ],
         stream: false,
-        max_tokens: 500, // CHANGED: Lowered from 800 to fit safely in free tier limits
+        max_tokens: 500,
         temperature: 0.7
       },
       {
@@ -31,11 +30,13 @@ export async function chatHelper(message, model = 'google/gemini-2.5-flash:free'
       }
     );
 
-    const content = res.data.choices?.[0]?.message?.content;
+    // FIXED: Cleaned up the optional chaining typos here
+    const content = res.data?.choices?.[0]?.message?.content;
     return { content: content || 'No reply from AI.' };
   } catch (e) {
     console.error('OpenRouter Error:', e.response?.data || e.message);
     throw new Error('AI failed to respond via OpenRouter.');
   }
 }
+
 
