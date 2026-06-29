@@ -32,3 +32,4 @@ export async function chatHelper(message, model = 'openai/gpt-4o') {
     console.error('OpenRouter Error:', e.response?.data || e.message);
     throw new Error('AI failed to respond via OpenRouter.');
   }
+}
