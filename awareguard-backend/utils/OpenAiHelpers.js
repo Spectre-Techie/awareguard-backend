@@ -3,9 +3,7 @@ import axios from 'axios';
 import 'dotenv/config';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
-
-// CHANGED: Using 'openai/gpt-oss-120b:free' as the absolute default free model 
-export async function chatHelper(message, model = 'openrouter/free') {
+export async function chatHelper(message, model = 'openai/gpt-4o') {
   const url = 'https://openrouter.ai/api/v1/chat/completions';
   try {
     const res = await axios.post(
@@ -28,7 +26,6 @@ export async function chatHelper(message, model = 'openrouter/free') {
       }
     );
 
-    // RESTORED: Your pristine, original array payload destructuring logic
     const content = res.data.choices?.[0]?.message?.content;
     return { content: content || 'No reply from AI.' };
   } catch (e) {
@@ -36,5 +33,3 @@ export async function chatHelper(message, model = 'openrouter/free') {
     throw new Error('AI failed to respond via OpenRouter.');
   }
 }
-
-
