@@ -1,4 +1,4 @@
-/ awareguard-backend/utils/OpenAiHelpers.js
+// awareguard-backend/utils/OpenAiHelpers.js
 import axios from 'axios';
 import 'dotenv/config';
 
