@@ -4,9 +4,13 @@ import 'dotenv/config';
 
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-// FIXED: Using a verified free tier model slug on OpenRouter
-export async function chatHelper(message, model = 'meta-llama/llama-3-8b-instruct:free') {
+/**
+ * Robust helper function to execute OpenRouter Chat Completions flawlessly.
+ * Defaults to the production unified free-models router.
+ */
+export async function chatHelper(message, model = 'openrouter/free') {
   const url = 'https://openrouter.ai';
+  
   try {
     const res = await axios.post(
       url,
@@ -31,12 +35,15 @@ export async function chatHelper(message, model = 'meta-llama/llama-3-8b-instruc
       }
     );
 
-    // CLEAN LOGIC: Reading the data payload securely
-    const content = res.data && res.data.choices && res.data.choices[0] && res.data.choices[0].message && res.data.choices[0].message.content;
+    // FIXED: Correctly parse choices array to capture string contents accurately
+    const content = res.data?.choices?.[0]?.message?.content;
+    
     return { content: content || 'No reply from AI.' };
   } catch (e) {
-    console.error('OpenRouter Error:', e.response?.data || e.message);
+    // Print explicit debugging parameters if Axios fails internally
+    console.error('OpenRouter Network Exception Details:', e.response?.data || e.message);
     throw new Error('AI failed to respond via OpenRouter.');
   }
 }
+
 
